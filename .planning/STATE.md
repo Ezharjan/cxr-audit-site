@@ -208,3 +208,7 @@ Quick task 261009-g23 completed: documentation only. Sol execution pending; see 
 ### Agent API execution (2026-10-09)
 
 Implemented quick-task handoff 261009-g23 in commit `a688ca1`: five authenticated routine API endpoints, admin API configuration, project-scoped own-user keys, actual PDF download/email and focused regression coverage. Local verification passed (98-test suite plus focused follow-up checks). Docker/Nginx/PostgreSQL deployment-host verification remains pending; API is disabled by default and has not been deployed/enabled. See [implementation summary](./quick/261009-g23-write-sol-implementation-plan-for-authen/IMPLEMENTATION-SUMMARY.md).
+
+### Upload handling implementation handoff (2026-10-09)
+
+Quick task 261009-vmg complete (documentation only). Sol implementation pending: [implementation plan](./quick/261009-vmg-write-sol-implementation-plan-for-config/IMPLEMENTATION-PLAN.md). Covers project-scoped formats, field semantics/report integration, protected results schema, incomplete exclusions versus invalid rejection, shared UI/API validation and security gates. No upload behaviour changed.
