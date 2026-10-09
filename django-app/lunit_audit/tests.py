@@ -128,6 +128,7 @@ class VisualShellTemplateTests(TestCase):
                                    ("/editor/", "More tools"), ("/view/", "More tools"), ("/gt/", "More tools")):
             with self.subTest(path=path):
                 html = self._render_shell(user, path=path)
+                self.assertEqual(html.count('aria-current="page"'), 1)
                 categories = html.split('<details class="nav-category"')[1:]
                 self.assertEqual(len(categories), 2)
                 for category, title, labels in zip(categories, ("More tools", "Admin"),

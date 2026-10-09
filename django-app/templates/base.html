@@ -66,7 +66,7 @@
                 <a href="{% url 'report_editor:editor' %}" class="nav-item {% block nav_report_editor %}{% endblock %}"{% if request.resolver_match.namespace == 'report_editor' %} aria-current="page"{% endif %}>
                     <svg class="nav-icon" aria-hidden="true"><use href="#icon-edit"/></svg><span>Report editor</span>
                 </a>
-                <a href="{% url 'viewer:index' %}" class="nav-item {% block nav_database %}{% endblock %}"{% if request.resolver_match.namespace == 'viewer' or request.resolver_match.namespace == 'gt' %} aria-current="page"{% endif %}>
+                <a href="{% url 'viewer:index' %}" class="nav-item {% block nav_database %}{% endblock %}"{% if request.resolver_match.namespace == 'viewer' %} aria-current="page"{% endif %}>
                     <svg class="nav-icon" aria-hidden="true"><use href="#icon-database"/></svg><span>Database</span>
                 </a>
                 {% endif %}
