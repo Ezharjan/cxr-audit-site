@@ -185,6 +185,8 @@ The numbered HIPAA phase position is unchanged.
 
 | 261009-fge | Use clipboard-check icon for Manual GT | 2026-10-09 | See quick summary | [261009-fge](./quick/261009-fge-use-clipboard-check-icon-for-manual-gt/) |
 
+| 261009-fhk | Expand categories by default and strengthen headings | 2026-10-09 | See quick summary | [261009-fhk](./quick/261009-fhk-expand-sidebar-categories-by-default/) |
+
 ## Deferred Items
 
 | Category | Item | Status | Deferred At |
