@@ -267,6 +267,24 @@ img, svg {
     padding: 20px 14px;
 }
 
+.nav-category {
+    margin-top: 12px;
+}
+
+.nav-category-title {
+    padding: 9px 12px;
+    color: var(--c-text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.nav-category-title:focus-visible {
+    outline: 2px solid var(--c-primary-dark);
+    outline-offset: -2px;
+    border-radius: 8px;
+}
+
 .nav-item {
     display: flex;
     min-height: 42px;

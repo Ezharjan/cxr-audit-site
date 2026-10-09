@@ -90,14 +90,14 @@ class DatabaseSettingsTests(SimpleTestCase):
     }
 )
 class VisualShellTemplateTests(TestCase):
-    def _render_shell(self, user, is_admin=False):
+    def _render_shell(self, user, is_admin=False, path="/report/"):
         template = engines["django"].from_string(
             "{% extends 'base.html' %}{% block nav_report %}active{% endblock %}"
             "{% block body %}<p>Shell probe</p>{% endblock %}"
         )
-        request = RequestFactory().get("/report/")
+        request = RequestFactory().get(path)
         request.user = user
-        request.resolver_match = resolve("/report/")
+        request.resolver_match = resolve(path)
         return template.render(
             {"user": user, "is_admin": is_admin}, request=request
         )
@@ -119,8 +119,31 @@ class VisualShellTemplateTests(TestCase):
             User.objects.create_user(username="admin", is_superuser=True), is_admin=True
         )
 
-        for label in ("Tasks", "Import", "Database"):
+        for label in ("Tasks", "Import", "Database", "Report editor"):
             self.assertIn(label, html)
+
+    def test_admin_categories_group_links_and_open_active_category(self):
+        user = User.objects.create_user(username="category-admin", is_superuser=True)
+        for path, active_title in (("/upload/tasks/", "Admin"), ("/upload/import/", "Admin"),
+                                   ("/editor/", "More tools"), ("/view/", "More tools")):
+            with self.subTest(path=path):
+                html = self._render_shell(user, path=path)
+                categories = html.split('<details class="nav-category"')[1:]
+                self.assertEqual(len(categories), 2)
+                for category, title, labels in zip(categories, ("Admin", "More tools"),
+                                                   (("Tasks", "Import"), ("Report editor", "Database"))):
+                    opening, content = category.split(">", 1)
+                    content = content.split("</details>", 1)[0]
+                    self.assertEqual("open" in opening, title == active_title)
+                    self.assertIn(f'<summary class="nav-category-title">{title}</summary>', content)
+                    for label in labels:
+                        self.assertIn(f"<span>{label}</span>", content)
+
+    def test_regular_user_has_no_admin_categories(self):
+        html = self._render_shell(User.objects.create_user(username="category-reviewer"))
+        self.assertNotIn('<details class="nav-category"', html)
+        for label in ("Tasks", "Import", "Report editor", "Database"):
+            self.assertNotIn(f"<span>{label}</span>", html)
 
     def test_unauthenticated_shell_omits_application_navigation(self):
         html = self._render_shell(AnonymousUser())
