@@ -179,6 +179,8 @@ The numbered HIPAA phase position is unchanged.
 
 | 261009-f7p | Collapsible Admin and More tools sidebar categories | 2026-10-09 | eab5f1f | [261009-f7p](./quick/261009-f7p-group-sidebar-tasks-and-import-under-adm/) |
 
+| 261009-fc0 | Enlarge category labels, move Manual GT and reorder categories | 2026-10-09 | See quick summary | [261009-fc0](./quick/261009-fc0-adjust-sidebar-category-size-ordering-an/) |
+
 ## Deferred Items
 
 | Category | Item | Status | Deferred At |
