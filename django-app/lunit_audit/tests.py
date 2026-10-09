@@ -125,13 +125,13 @@ class VisualShellTemplateTests(TestCase):
     def test_admin_categories_group_links_and_open_active_category(self):
         user = User.objects.create_user(username="category-admin", is_superuser=True)
         for path, active_title in (("/upload/tasks/", "Admin"), ("/upload/import/", "Admin"),
-                                   ("/editor/", "More tools"), ("/view/", "More tools")):
+                                   ("/editor/", "More tools"), ("/view/", "More tools"), ("/gt/", "More tools")):
             with self.subTest(path=path):
                 html = self._render_shell(user, path=path)
                 categories = html.split('<details class="nav-category"')[1:]
                 self.assertEqual(len(categories), 2)
-                for category, title, labels in zip(categories, ("Admin", "More tools"),
-                                                   (("Tasks", "Import"), ("Report editor", "Database"))):
+                for category, title, labels in zip(categories, ("More tools", "Admin"),
+                                                   (("Report editor", "Database", "Manual GT"), ("Tasks", "Import"))):
                     opening, content = category.split(">", 1)
                     content = content.split("</details>", 1)[0]
                     self.assertEqual("open" in opening, title == active_title)
@@ -141,7 +141,10 @@ class VisualShellTemplateTests(TestCase):
 
     def test_regular_user_has_no_admin_categories(self):
         html = self._render_shell(User.objects.create_user(username="category-reviewer"))
-        self.assertNotIn('<details class="nav-category"', html)
+        self.assertEqual(html.count('<details class="nav-category"'), 1)
+        self.assertIn('<summary class="nav-category-title">More tools</summary>', html)
+        self.assertIn("<span>Manual GT</span>", html)
+        self.assertNotIn('<summary class="nav-category-title">Admin</summary>', html)
         for label in ("Tasks", "Import", "Report editor", "Database"):
             self.assertNotIn(f"<span>{label}</span>", html)
 

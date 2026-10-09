@@ -60,9 +60,20 @@
             <a href="{% url 'report:index' %}" class="nav-item {% block nav_report_v1 %}{% endblock %}"{% if request.resolver_match.namespace == 'report' %} aria-current="page"{% endif %}>
                 <svg class="nav-icon" aria-hidden="true"><use href="#icon-report"/></svg><span>Report V1</span>
             </a>
-            <a href="{% url 'gt:index' %}" class="nav-item {% block nav_gt %}{% endblock %}"{% if request.resolver_match.namespace == 'gt' %} aria-current="page"{% endif %}>
-                <svg class="nav-icon" aria-hidden="true"><use href="#icon-edit"/></svg><span>Manual GT</span>
-            </a>
+            <details class="nav-category"{% if request.resolver_match.namespace == 'report_editor' or request.resolver_match.namespace == 'viewer' or request.resolver_match.namespace == 'gt' %} open{% endif %}>
+                <summary class="nav-category-title">More tools</summary>
+                {% if user.is_superuser or is_admin %}
+                <a href="{% url 'report_editor:editor' %}" class="nav-item {% block nav_report_editor %}{% endblock %}"{% if request.resolver_match.namespace == 'report_editor' %} aria-current="page"{% endif %}>
+                    <svg class="nav-icon" aria-hidden="true"><use href="#icon-edit"/></svg><span>Report editor</span>
+                </a>
+                <a href="{% url 'viewer:index' %}" class="nav-item {% block nav_database %}{% endblock %}"{% if request.resolver_match.namespace == 'viewer' or request.resolver_match.namespace == 'gt' %} aria-current="page"{% endif %}>
+                    <svg class="nav-icon" aria-hidden="true"><use href="#icon-database"/></svg><span>Database</span>
+                </a>
+                {% endif %}
+                <a href="{% url 'gt:index' %}" class="nav-item {% block nav_gt %}{% endblock %}"{% if request.resolver_match.namespace == 'gt' %} aria-current="page"{% endif %}>
+                    <svg class="nav-icon" aria-hidden="true"><use href="#icon-edit"/></svg><span>Manual GT</span>
+                </a>
+            </details>
             {% if user.is_superuser or is_admin %}
             <details class="nav-category"{% if request.resolver_match.view_name == 'upload:tasks_list' or request.resolver_match.view_name == 'upload:import_data' %} open{% endif %}>
                 <summary class="nav-category-title">Admin</summary>
@@ -71,15 +82,6 @@
                 </a>
                 <a href="{% url 'upload:import_data' %}" class="nav-item {% block nav_import %}{% endblock %}"{% if request.resolver_match.view_name == 'upload:import_data' %} aria-current="page"{% endif %}>
                     <svg class="nav-icon" aria-hidden="true"><use href="#icon-import"/></svg><span>Import</span>
-                </a>
-            </details>
-            <details class="nav-category"{% if request.resolver_match.namespace == 'report_editor' or request.resolver_match.namespace == 'viewer' %} open{% endif %}>
-                <summary class="nav-category-title">More tools</summary>
-                <a href="{% url 'report_editor:editor' %}" class="nav-item {% block nav_report_editor %}{% endblock %}"{% if request.resolver_match.namespace == 'report_editor' %} aria-current="page"{% endif %}>
-                    <svg class="nav-icon" aria-hidden="true"><use href="#icon-edit"/></svg><span>Report editor</span>
-                </a>
-                <a href="{% url 'viewer:index' %}" class="nav-item {% block nav_database %}{% endblock %}"{% if request.resolver_match.namespace == 'viewer' %} aria-current="page"{% endif %}>
-                    <svg class="nav-icon" aria-hidden="true"><use href="#icon-database"/></svg><span>Database</span>
                 </a>
             </details>
             {% endif %}
