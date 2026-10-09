@@ -183,6 +183,8 @@ The numbered HIPAA phase position is unchanged.
 
 | 261009-fe3 | Align sidebar triangles with app icon columns | 2026-10-09 | See quick summary | [261009-fe3](./quick/261009-fe3-align-sidebar-disclosure-triangles-with-/) |
 
+| 261009-fge | Use clipboard-check icon for Manual GT | 2026-10-09 | See quick summary | [261009-fge](./quick/261009-fge-use-clipboard-check-icon-for-manual-gt/) |
+
 ## Deferred Items
 
 | Category | Item | Status | Deferred At |
