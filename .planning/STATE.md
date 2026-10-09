@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-14)
 Phase: 6 of 6 (remaining hipaa controls plan)
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-10-09 - Completed quick task 261009-f5m: Canonical report edit link
+Last activity: 2026-10-09 - Completed quick task 261009-f7p: Collapsible sidebar categories
 
 Progress: [----------] 0%
 
@@ -176,6 +176,8 @@ The numbered HIPAA phase position is unchanged.
 | 261009-eu8 | Move report catalog and editor to /editor/ | 2026-10-09 | See quick summary | [261009-eu8](./quick/261009-eu8-move-report-editor-catalog-and-detail-to/) |
 
 | 261009-f5m | Canonical report-name link from Edit report | 2026-10-09 | See quick summary | [261009-f5m](./quick/261009-f5m-use-canonical-report-name-in-report-edit/) |
+
+| 261009-f7p | Collapsible Admin and More tools sidebar categories | 2026-10-09 | eab5f1f | [261009-f7p](./quick/261009-f7p-group-sidebar-tasks-and-import-under-adm/) |
 
 ## Deferred Items
 
