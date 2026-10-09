@@ -186,6 +186,7 @@ The numbered HIPAA phase position is unchanged.
 | 261009-fge | Use clipboard-check icon for Manual GT | 2026-10-09 | See quick summary | [261009-fge](./quick/261009-fge-use-clipboard-check-icon-for-manual-gt/) |
 
 | 261009-fhk | Expand categories by default and strengthen headings | 2026-10-09 | See quick summary | [261009-fhk](./quick/261009-fhk-expand-sidebar-categories-by-default/) |
+| 261009-hhi | Fix API settings UI and support Never key expiry | 2026-10-09 | 7e71c63 | [261009-hhi](./quick/261009-hhi-fix-api-settings-ui-and-support-keys-tha/) |
 
 ## Deferred Items
 
