@@ -181,6 +181,8 @@ The numbered HIPAA phase position is unchanged.
 
 | 261009-fc0 | Enlarge category labels, move Manual GT and reorder categories | 2026-10-09 | See quick summary | [261009-fc0](./quick/261009-fc0-adjust-sidebar-category-size-ordering-an/) |
 
+| 261009-fe3 | Align sidebar triangles with app icon columns | 2026-10-09 | See quick summary | [261009-fe3](./quick/261009-fe3-align-sidebar-disclosure-triangles-with-/) |
+
 ## Deferred Items
 
 | Category | Item | Status | Deferred At |
