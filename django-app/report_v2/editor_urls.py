@@ -12,5 +12,5 @@ urlpatterns = [
     path("actions/unpublish/", admin_views.editor_unpublish, name="editor_unpublish"),
     path("actions/new/", admin_views.editor_new, name="editor_new"),
     path("actions/delete/", admin_views.editor_delete, name="editor_delete"),
-    path("editor/<str:def_id>/", admin_views.editor, name="editor_detail"),
+    path("<str:def_id>/", admin_views.editor, name="editor_detail"),
 ]

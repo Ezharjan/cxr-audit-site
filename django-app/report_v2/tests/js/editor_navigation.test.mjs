@@ -11,7 +11,7 @@ test("saving uses the report ID from the editor route without a report selector"
   const root = {
     querySelector: query => query.includes("yaml-textarea") ? textarea : query.includes("validation-summary") ? summary : null,
     addEventListener: (name, handler) => { if (name === "click") click = handler; },
-    getAttribute: name => ({ "data-def-id": "my_report", "data-save-url": "/layout/actions/save/" })[name],
+    getAttribute: name => ({ "data-def-id": "my_report", "data-save-url": "/editor/actions/save/" })[name],
   };
   runInNewContext(source, { URLSearchParams,
     document: { querySelector: () => root, cookie: "" }, window: {},
@@ -20,7 +20,7 @@ test("saving uses the report ID from the editor route without a report selector"
   click({ target: { closest: () => ({ getAttribute: () => "save" }) }, preventDefault() {} });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(summary.textContent, "2 validation issues");
-  assert.equal(posted.url, "/layout/actions/save/");
+  assert.equal(posted.url, "/editor/actions/save/");
   assert.equal(new URLSearchParams(posted.body).get("def_id"), "my_report");
   assert.equal(new URLSearchParams(posted.body).get("yaml_text"), textarea.value);
 });
@@ -32,7 +32,7 @@ test("selecting a card automatically requests its preview", async () => {
   const root = {
     querySelector: query => query.includes("preview-card") ? card : null,
     addEventListener() {},
-    getAttribute: name => ({ "data-def-id": "my_report", "data-preview-url": "/layout/actions/preview/" })[name],
+    getAttribute: name => ({ "data-def-id": "my_report", "data-preview-url": "/editor/actions/preview/" })[name],
   };
   runInNewContext(source, { URLSearchParams,
     document: { querySelector: () => root, cookie: "" }, window: {},
@@ -52,7 +52,7 @@ test("an older preview response cannot replace the latest selection", async () =
   const card = { value: "first", addEventListener: (_, handler) => { change = handler; } };
   const root = {
     querySelector: query => query.includes("preview-card") ? card : query.includes("validation-summary") ? summary : null,
-    addEventListener() {}, getAttribute: () => "/layout/actions/preview/",
+    addEventListener() {}, getAttribute: () => "/editor/actions/preview/",
   };
   runInNewContext(source, { URLSearchParams,
     document: { querySelector: () => root, cookie: "" }, window: {},

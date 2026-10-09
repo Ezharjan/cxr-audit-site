@@ -68,11 +68,11 @@ sections: []
 """
 
 _MUTATION_PATHS = {
-    "save": "/layout/actions/save/",
-    "preview": "/layout/actions/preview/",
-    "publish": "/layout/actions/publish/",
-    "unpublish": "/layout/actions/unpublish/",
-    "new": "/layout/actions/new/",
+    "save": "/editor/actions/save/",
+    "preview": "/editor/actions/preview/",
+    "publish": "/editor/actions/publish/",
+    "unpublish": "/editor/actions/unpublish/",
+    "new": "/editor/actions/new/",
 }
 
 _SETTINGS = dict(
@@ -122,7 +122,7 @@ class EditorAdminSecurityTests(TestCase):
         """Anonymous + normal users get 403/redirect (never 200) for the page AND every direct POST."""
         # Anonymous through the full HTTP stack.
         anon = self._client(enforce_csrf=True)
-        page = anon.get("/layout/")
+        page = anon.get("/editor/")
         self.assertEqual(page.status_code, 302)
         self.assertIn("/login", page.url)
         for label, url in _MUTATION_PATHS.items():
@@ -133,7 +133,7 @@ class EditorAdminSecurityTests(TestCase):
 
         # Authenticated non-admin through the full HTTP stack.
         normal = self._as_user_client(self.normal, enforce_csrf=True)
-        page = normal.get("/layout/")
+        page = normal.get("/editor/")
         self.assertEqual(page.status_code, 403)
         for label, url in _MUTATION_PATHS.items():
             with self.subTest(user="normal", endpoint=label):
@@ -177,7 +177,7 @@ class EditorAdminSecurityTests(TestCase):
     def test_bad_csrf_token_rejected(self):
         """Even a supplied-but-wrong token cannot bypass the CSRF protection."""
         client = self._as_admin(enforce_csrf=True)
-        client.get("/layout/")  # establish a csrftoken cookie
+        client.get("/editor/")  # establish a csrftoken cookie
         token = client.cookies.get("csrftoken")
         # Sanity: the editor page handed the admin a CSRF cookie at all.
         self.assertIsNotNone(token)
@@ -284,20 +284,28 @@ class EditorAdminSecurityTests(TestCase):
         self.assertEqual(self._repo()._read_pointer("report-a"), "report-a@r2")
         self.assertIsNone(self._repo()._read_pointer("report-b"))
 
+    def test_legacy_layout_bookmarks_redirect_to_editor(self):
+        client = self._as_admin()
+        self.assertRedirects(client.get("/layout/"), "/editor/")
+        self._repo().save_draft("testreport", VALID_YAML, expected_revision=None)
+        self.assertRedirects(client.get("/layout/editor/testreport/"), "/editor/t/")
+        self.assertEqual(reverse("report_editor:editor_detail", args=["t"]), "/editor/t/")
+        self.assertEqual(client.get("/editor/missing/").status_code, 404)
+
     # -- 7. the reserved route wins before any slug ----------------------
     def test_editor_route_before_slug(self):
-        """'/layout/' resolves to the editor with no slug kwargs; legacy routes are intact."""
-        match = resolve("/layout/")
+        """'/editor/' resolves to the editor with no slug kwargs; legacy routes are intact."""
+        match = resolve("/editor/")
         self.assertIs(match.func, av.editor)
         self.assertEqual(match.kwargs, {})  # not captured as a slug/def_id pattern
 
         # The report index still routes to the legacy v2 index view, and every named editor route
-        # reverses inside the reserved /layout/ block (distinct names, none shadowed).
+        # reverses inside the reserved /editor/ block (distinct names, none shadowed).
         self.assertIs(resolve("/report/").func, views.index)
-        self.assertEqual(resolve("/layout/").url_name, "editor")
+        self.assertEqual(resolve("/editor/").url_name, "editor")
         for name in ("editor_save_draft", "editor_preview", "editor_publish", "editor_new"):
             with self.subTest(name=name):
-                self.assertTrue(reverse(f"report_editor:{name}").startswith("/layout/"))
+                self.assertTrue(reverse(f"report_editor:{name}").startswith("/editor/"))
 
         # A stray slug path is NOT swallowed by the reserved block (still 404, i.e. no catch-all
         # was added and the legacy report lives on its own separate /report-old/ mount).
@@ -306,13 +314,13 @@ class EditorAdminSecurityTests(TestCase):
 
         # The admin page itself renders 200 through the full stack (proves the base-template
         # inheritance and the static assets actually resolve).
-        page = self._as_admin().get("/layout/")
+        page = self._as_admin().get("/editor/")
         self.assertEqual(page.status_code, 200)
         self.assertIn("Report editor", page.content.decode())
 
     def test_visual_editor_updates_yaml_without_saving(self):
         client = self._as_admin()
-        response = client.post("/layout/actions/visual/", {
+        response = client.post("/editor/actions/visual/", {
             "yaml_text": VALID_YAML,
             "operation": '{"action":"resize","section_id":"s","widget_id":"w","layout":{"width":6,"height":4}}',
         })
@@ -320,7 +328,7 @@ class EditorAdminSecurityTests(TestCase):
         self.assertIn("width: 6", response.json()["yaml_text"])
         self.assertFalse((self.root / "prime" / "drafts").exists())
         client = self._as_admin(enforce_csrf=True)
-        self.assertEqual(client.post("/layout/actions/visual/", {"yaml_text": VALID_YAML}).status_code, 403)
+        self.assertEqual(client.post("/editor/actions/visual/", {"yaml_text": VALID_YAML}).status_code, 403)
 
     # -- 14A.4 selector lists published + drafts with a state label ------------------- #
     def test_editor_selector_lists_published_and_drafts_with_state(self):
@@ -330,9 +338,9 @@ class EditorAdminSecurityTests(TestCase):
         created = self._as_admin().post(_MUTATION_PATHS["new"], {"def_id": "drafted"})
         self.assertEqual(created.status_code, 200)
 
-        body = self._as_admin().get("/layout/").content.decode("utf-8")
-        self.assertIn('href="/layout/editor/t/"', body)
-        self.assertIn('href="/layout/editor/new_report/"', body)
+        body = self._as_admin().get("/editor/").content.decode("utf-8")
+        self.assertIn('href="/editor/t/"', body)
+        self.assertIn('href="/editor/new_report/"', body)
         self.assertIn('data-state="published"', body)
         self.assertIn('data-state="draft only"', body)
         self.assertIn("listed — published", body)
@@ -340,7 +348,7 @@ class EditorAdminSecurityTests(TestCase):
 
         # Saving a draft for the published def flips its label to the combined state.
         self._as_admin().post(_MUTATION_PATHS["save"], {"def_id": "listed", "yaml_text": VALID_YAML})
-        again = self._as_admin().get("/layout/").content.decode("utf-8")
+        again = self._as_admin().get("/editor/").content.decode("utf-8")
         self.assertIn('data-state="published + draft"', again)
 
     # -- 14A.5 opening a published-only report is read-only in memory ------------------ #
@@ -349,7 +357,7 @@ class EditorAdminSecurityTests(TestCase):
             _MUTATION_PATHS["publish"], {"def_id": "listed", "yaml_text": VALID_YAML}
         )
         self.assertEqual(published.status_code, 200)
-        response = self._as_admin().get("/layout/editor/listed/", follow=True)
+        response = self._as_admin().get("/editor/listed/", follow=True)
         self.assertEqual(response.status_code, 200)
         body = response.content.decode("utf-8")
         self.assertIn("title: T", body)
@@ -377,7 +385,7 @@ class EditorAdminSecurityTests(TestCase):
         self.assertTrue((self.root / "drafts" / "listed").exists())
         self.assertEqual(self._repo().read_draft("listed")[0], saved.json()["yaml_text"])
 
-        again = self._as_admin().get("/layout/editor/listed/", follow=True).content.decode("utf-8")
+        again = self._as_admin().get("/editor/listed/", follow=True).content.decode("utf-8")
         self.assertIn('data-source-state="draft"', again)
 
     # -- 14A.7 previewing from the published view still writes nothing ------------------- #
@@ -408,7 +416,7 @@ class EditorAdminSecurityTests(TestCase):
                 request.user = user
                 request.resolver_match = resolve(request.path)
                 body = render_to_string("base.html", request=request)
-                self.assertEqual('href="/layout/"' in body, visible)
+                self.assertEqual('href="/editor/"' in body, visible)
                 if visible:
                     self.assertIn('aria-current="page"', body)
         client = Client()
@@ -433,7 +441,7 @@ class EditorAdminSecurityTests(TestCase):
 
     def test_editor_copy_and_site_styles(self):
         self._as_admin().post(_MUTATION_PATHS["new"], {"def_id": "copytest"})
-        body = self._as_admin().get("/layout/editor/copytest/", follow=True).content.decode()
+        body = self._as_admin().get("/editor/copytest/", follow=True).content.decode()
         self.assertNotIn("Admin-only. Drafts are saved privately", body)
         self.assertNotIn("Preview renders from synthetic data only", body)
         self.assertNotIn("editor-seeds", body)
@@ -452,7 +460,7 @@ class EditorAdminSecurityTests(TestCase):
     def test_named_template_creation_and_duplicate_protection(self):
         created = self._as_admin().post(_MUTATION_PATHS["new"], {"name": "My Report", "template": "prime"})
         self.assertEqual(created.status_code, 200)
-        self.assertEqual(created.json()["url"], "/layout/editor/my_report/")
+        self.assertEqual(created.json()["url"], "/editor/my_report/")
         from report_v2.definitions.loader import load_report_definition
         layout = load_report_definition(self._repo().read_draft("my_report")[0])
         self.assertEqual(layout["title"], "My Report")
@@ -524,23 +532,23 @@ class EditorAdminSecurityTests(TestCase):
     def test_catalog_create_follows_reports(self):
         self._as_admin().post(_MUTATION_PATHS["new"], {"name": "Placement check"})
         body = self._as_admin().get(reverse("report_editor:editor")).content.decode()
-        self.assertGreater(body.index('data-action="create"'), body.index('href="/layout/editor/placement_check/"'))
+        self.assertGreater(body.index('data-action="create"'), body.index('href="/editor/placement_check/"'))
 
     def test_name_based_editor_heading_redirect_and_identity(self):
         repo = self._repo()
         text = VALID_YAML.replace("title: T", "title: Analysis Report")
         repo.save_draft("overview", text, expected_revision=None)
         client = self._as_admin()
-        response = client.get("/layout/editor/overview/")
-        self.assertRedirects(response, "/layout/editor/analysis_report/")
-        body = client.get("/layout/editor/analysis_report/").content.decode()
+        response = client.get("/editor/overview/")
+        self.assertRedirects(response, "/editor/analysis_report/")
+        body = client.get("/editor/analysis_report/").content.decode()
         self.assertIn('class="page-title">Editing: Analysis Report</h1>', body)
         self.assertIn('data-def-id="overview"', body)
         self.assertNotIn('class="page-title">Report layout', body)
-        self.assertIn('href="/layout/editor/analysis_report/"', client.get("/layout/").content.decode())
+        self.assertIn('href="/editor/analysis_report/"', client.get("/editor/").content.decode())
         normal = Client()
         normal.force_login(self.normal)
-        self.assertEqual(normal.get("/layout/editor/analysis_report/").status_code, 403)
+        self.assertEqual(normal.get("/editor/analysis_report/").status_code, 403)
 
     def test_duplicate_report_names_have_distinct_safe_editor_urls(self):
         from report_v2.admin_views import _report_entries
@@ -601,12 +609,12 @@ class EditorAdminSecurityTests(TestCase):
         client = self._as_admin()
         repo = self._repo()
         revision = repo.save_draft("cycle", VALID_YAML, expected_revision=None)
-        page = client.get("/layout/editor/t/").content.decode()
+        page = client.get("/editor/t/").content.decode()
         self.assertIn('data-role="view-report" disabled', page)
         result = client.post(_MUTATION_PATHS["publish"], {"def_id": "cycle", "expected_revision": revision})
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.json()["url"], "/report/cycle/")
-        page = client.get("/layout/editor/t/").content.decode()
+        page = client.get("/editor/t/").content.decode()
         self.assertIn('>Unpublish</button>', page)
         self.assertIn('href="/report/cycle/">View report', page)
         stale = client.post(_MUTATION_PATHS["unpublish"], {"def_id": "cycle", "expected_version": "cycle@r0"})

@@ -637,7 +637,7 @@ class PublishedReportPageTests(TestCase):
         with mock.patch("report_v2.data.fetch_project_rows", side_effect=_make_seam(empty_ids={"v2"})):
             admin = self._page(self._login(self.admin, enforce_csrf=False), "t13report")
             ordinary = self._page(self._login(self.normal, enforce_csrf=False), "t13report")
-        self.assertIn('href="/layout/editor/t13report/"', admin)
+        self.assertIn('href="/editor/t13report/"', admin)
         self.assertIn('data-role="edit-layout"', admin)
         for forbidden in ("Edit layout", "/report/layout/"):
             with self.subTest(token=forbidden):

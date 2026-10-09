@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-14)
 Phase: 6 of 6 (remaining hipaa controls plan)
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-10-09 - Completed quick task 261009-e9w: Report editor reflections
+Last activity: 2026-10-09 - Completed quick task 261009-eu8: Move report editor URLs
 
 Progress: [----------] 0%
 
@@ -172,6 +172,8 @@ recorded in [visual-editor-execution/SUMMARY.md](./report-v2/visual-editor-execu
 The numbered HIPAA phase position is unchanged.
 
 | 261009-e9w | Report editor reflections across 7–9 October | 2026-10-09 | 5b4829f | [261009-e9w](./quick/261009-e9w-capture-report-editor-reflections-for-8-/) |
+
+| 261009-eu8 | Move report catalog and editor to /editor/ | 2026-10-09 | See quick summary | [261009-eu8](./quick/261009-eu8-move-report-editor-catalog-and-detail-to/) |
 
 ## Deferred Items
 

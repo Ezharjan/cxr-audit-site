@@ -621,11 +621,11 @@ class BrowserLayoutTests(unittest.TestCase):
     def test_editor_navigation_from_admin_page(self):
         self._goto(self.report_url, width=1440, height=900)
         link = self.page.locator('[data-role="edit-layout"]').first
-        self.assertEqual(link.get_attribute("href"), f"/layout/editor/{DEF_ID}/")
+        self.assertEqual(link.get_attribute("href"), f"/editor/{DEF_ID}/")
         editor_url = self.server.base + link.get_attribute("href")
         link.click()
         self.page.wait_for_load_state("networkidle")
-        self.assertTrue(self.page.url.endswith("/layout/editor/browser_layout_14a/"), self.page.url)
+        self.assertTrue(self.page.url.endswith("/editor/browser_layout_14a/"), self.page.url)
         self.assertEqual(self.page.locator("h1").inner_text(), "Editing: Browser Layout 14A")
         self.assertEqual(self.page.locator("[data-editor]").get_attribute("data-def-id"), DEF_ID)
         self.assertEqual(self.page.locator('[data-role="report-select"]').count(), 0)

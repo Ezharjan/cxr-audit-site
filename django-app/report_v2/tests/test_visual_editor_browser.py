@@ -20,7 +20,7 @@ class VisualEditorBrowserTests(unittest.TestCase):
         return load_report_definition(self.page.locator('#id_yaml_text').input_value())
 
     def test_card_deletion_requires_confirmation(self):
-        self.page.goto(self.server.base + '/layout/editor/browser_layout_14a/')
+        self.page.goto(self.server.base + '/editor/browser_layout_14a/')
         self.ready()
         original = self.page.locator('#id_yaml_text').input_value()
         card = self.page.locator('[data-widget-id=bv]')
@@ -54,7 +54,7 @@ class VisualEditorBrowserTests(unittest.TestCase):
     def test_complete_visual_workflow(self):
         errors = []
         self.page.on('pageerror', lambda error: errors.append(str(error)))
-        self.page.goto(self.server.base + '/layout/editor/browser_layout_14a/')
+        self.page.goto(self.server.base + '/editor/browser_layout_14a/')
         self.ready()
         self.assertEqual(self.page.locator('.visual-card').count(), 5)
         original = self.page.locator('#id_yaml_text').input_value()
@@ -129,7 +129,7 @@ class VisualEditorBrowserTests(unittest.TestCase):
 
     def test_narrow_canvas_preserves_width_and_options_work(self):
         self.page.set_viewport_size({'width': 390, 'height': 844})
-        self.page.goto(self.server.base + '/layout/editor/browser_layout_14a/')
+        self.page.goto(self.server.base + '/editor/browser_layout_14a/')
         self.ready()
         before = self.page.locator('#id_yaml_text').input_value()
         self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), 391)
@@ -141,7 +141,7 @@ class VisualEditorBrowserTests(unittest.TestCase):
         self.page.set_viewport_size({'width': 1440, 'height': 900})
 
     def test_toolbar_add_card_height_and_publication_cycle(self):
-        self.page.goto(self.server.base + '/layout/editor/browser_layout_14a/')
+        self.page.goto(self.server.base + '/editor/browser_layout_14a/')
         self.ready()
         self.page.locator('#yamlEditorTab').click()
         yaml_input = self.page.locator('#id_yaml_text')
@@ -174,7 +174,7 @@ class VisualEditorBrowserTests(unittest.TestCase):
         self.page.wait_for_url('**/report/browser14a/')
         report = self.page.locator('.widget-frame').filter(has_text='Row-end synthetic card')
         self.assertAlmostEqual(report.bounding_box()['height'], 5 * 80 + 4 * 16, delta=1)
-        self.page.goto(self.server.base + '/layout/editor/browser_layout_14a/')
+        self.page.goto(self.server.base + '/editor/browser_layout_14a/')
         self.ready()
         self.assertEqual(self.page.locator('[data-action=publish]').inner_text(), 'Unpublish')
         self.assertEqual(self.page.locator('[data-role=view-report]').get_attribute('href'), '/report/browser14a/')
@@ -183,7 +183,7 @@ class VisualEditorBrowserTests(unittest.TestCase):
         self.assertEqual(self.page.locator('[data-action=publish]').inner_text(), 'Publish')
 
     def test_heading_divider_defaults_and_toolbar(self):
-        self.page.goto(self.server.base + '/layout/editor/browser_layout_14a/')
+        self.page.goto(self.server.base + '/editor/browser_layout_14a/')
         self.ready()
         undo = self.page.locator('[data-visual-action=undo]').bounding_box()
         add = self.page.locator('[data-visual-action=add-card]').bounding_box()

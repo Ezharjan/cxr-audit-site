@@ -53,7 +53,7 @@ class VisualEditorTests(SimpleTestCase):
             load_report_definition(yaml.safe_dump(bad))
 
     def test_trust_boundary_and_no_persistence(self):
-        request = RequestFactory().post('/layout/actions/visual/', {'yaml_text': VALID_YAML})
+        request = RequestFactory().post('/editor/actions/visual/', {'yaml_text': VALID_YAML})
         request.user = SimpleNamespace(is_authenticated=True, is_superuser=False, groups=SimpleNamespace(filter=lambda **kwargs: SimpleNamespace(exists=lambda: False)))
         self.assertEqual(admin_views.editor_visual(request).status_code, 403)
         request.user.is_superuser = True
@@ -63,7 +63,7 @@ class VisualEditorTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(json.loads(response.content)['yaml_text'], VALID_YAML)
         self.assertIn('catalog', json.loads(response.content))
-        request = RequestFactory().post('/layout/actions/visual/', {'yaml_text': VALID_YAML, 'operation': '{bad'})
+        request = RequestFactory().post('/editor/actions/visual/', {'yaml_text': VALID_YAML, 'operation': '{bad'})
         request.user = SimpleNamespace(is_authenticated=True, is_superuser=True)
         request._dont_enforce_csrf_checks = True
         self.assertEqual(admin_views.editor_visual(request).status_code, 422)
