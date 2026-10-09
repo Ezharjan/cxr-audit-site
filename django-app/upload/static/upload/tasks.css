@@ -61,7 +61,7 @@
     white-space: nowrap;
 }
 .status-queued     { background: var(--c-warning-soft); color: var(--c-warning); }
-.status-processing { background: var(--c-primary-soft); color: var(--c-primary-dark); }
+.status-processing, .status-saving { background: var(--c-primary-soft); color: var(--c-primary-dark); }
 .status-completed  { background: var(--c-success-soft); color: var(--c-success); }
 .status-failed     { background: var(--c-danger-soft); color: var(--c-danger); }
 .status-cancelled  { background: var(--c-surface-muted); color: var(--c-text-muted); }

@@ -12,7 +12,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ print.title }} — {{ print.version }} — Print — PRIMER-LLM</title>
-    <link rel="stylesheet" href="{% static 'report_v2/print.css' %}">
+    {% if automated_pdf %}<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none';">
+    <style>{{ pdf_css|safe }}</style>{% else %}<link rel="stylesheet" href="{% static 'report_v2/print.css' %}">{% endif %}
 </head>
 <body class="print-body">
     <header class="print-header">
@@ -21,10 +22,11 @@
             Report <code>{{ print.slug }}</code> · project <code>{{ print.project_id }}</code>
             · generated {{ print.generated }}
         </p>
+        {% if automated_pdf %}<p class="print-meta">Routine report using the published defaults. Values are frozen at generation.</p>{% else %}
         <p class="print-meta">Frozen export snapshot: the values below are the ones the open report
             page showed when the export was requested. They do not change with later data or
             publication.</p>
-        <button type="button" class="print-button no-print" onclick="window.print()">Print / Save as PDF</button>
+        <button type="button" class="print-button no-print" onclick="window.print()">Print / Save as PDF</button>{% endif %}
     </header>
 
     <main class="print-main">

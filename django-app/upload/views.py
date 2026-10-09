@@ -47,87 +47,64 @@ _active_worker_task_id = None  # tracks which task the background thread is moni
 def _get_active_task():
     """Return the currently active (queued/processing) ProcessingTask, or None."""
     return ProcessingTask.objects.filter(
-        status__in=['queued', 'processing']
+        status__in=['queued', 'processing', 'saving']
     ).order_by('-created_at').first()
 
 
+def _update_task_progress(task_id, status_data):
+    """Progress polling must never overwrite already-persisted results."""
+    fields = {
+        'status': 'saving' if status_data.get('status') == 'completed' else status_data.get('status', 'processing'),
+        'progress_message': status_data.get('progress', ''),
+        'progress_percent': status_data.get('progress_percent', 0),
+    }
+    details = status_data.get('progress_details') or {}
+    if details:
+        fields.update(progress_step=details.get('step', ''), progress_current=details.get('current', 0), progress_total=details.get('total', 0))
+    ProcessingTask.objects.filter(pk=task_id, results_saved_at=None).exclude(status__in=['completed', 'failed', 'cancelled']).update(**fields)
+
+
 def _background_poll_and_save(task_id, api_url):
-    """
-    Background thread: polls the FastAPI status endpoint, updates the
-    ProcessingTask in the Django DB, and auto-saves results on completion.
-    """
+    """Poll processing and persist results before declaring completion."""
     import time
     import django.db
     global _active_worker_task_id
-
     try:
-        # Ensure this thread has a DB connection
         django.db.connections.close_all()
-
-        poll_interval = 3  # seconds
-
         while True:
-            time.sleep(poll_interval)
-
-            try:
-                task = ProcessingTask.objects.get(task_id=task_id)
-            except ProcessingTask.DoesNotExist:
-                print(f"[BG Worker] Task {task_id} not found in DB, stopping.")
+            time.sleep(3)
+            task = ProcessingTask.objects.filter(pk=task_id).first()
+            if task is None or task.status in ('completed', 'failed', 'cancelled'):
                 break
-
-            # If task was already marked completed/failed/cancelled externally, stop
-            if task.status in ('completed', 'failed', 'cancelled'):
-                print(f"[BG Worker] Task {task_id} already {task.status}, stopping.")
-                break
-
-            # Poll FastAPI
             try:
-                r = requests.get(f"{api_url}/status/{task_id}", headers=get_api_headers(), timeout=30)
-                if r.status_code != 200:
+                response = requests.get(f"{api_url}/status/{task_id}", headers=get_api_headers(), timeout=30)
+                if response.status_code == 404:
+                    ProcessingTask.objects.filter(pk=task_id, results_saved_at=None).exclude(status='cancelled').update(
+                        status='failed', completed_at=timezone.now(), error_message='Processor state unavailable')
+                    break
+                if response.status_code != 200:
                     continue
-                status_data = r.json()
-            except Exception as e:
-                print(f"[BG Worker] Status poll error for {task_id}: {e}")
+                status_data = response.json()
+            except Exception:
+                print(f"[BG Worker] Status poll error for {task_id}.")
                 continue
-
-            # Update local task record
-            task.status = status_data.get('status', task.status)
-            task.progress_message = status_data.get('progress', '')
-            task.progress_percent = status_data.get('progress_percent', 0)
-            if status_data.get('progress_details'):
-                d = status_data['progress_details']
-                task.progress_step = d.get('step', '')
-                task.progress_current = d.get('current', 0)
-                task.progress_total = d.get('total', 0)
-            task.save()
-
+            _update_task_progress(task_id, status_data)
             if status_data.get('status') == 'completed':
-                print(f"[BG Worker] Task {task_id} completed, fetching results…")
                 _background_fetch_and_save(task_id, api_url, task)
                 break
-            elif status_data.get('status') == 'failed':
-                task.status = 'failed'
-                task.completed_at = timezone.now()
-                task.error_message = status_data.get('error', 'Unknown error')
-                task.save()
-                print(f"[BG Worker] Task {task_id} failed: {task.error_message}")
+            if status_data.get('status') == 'failed':
+                ProcessingTask.objects.filter(pk=task_id, results_saved_at=None).exclude(status='cancelled').update(
+                    status='failed', completed_at=timezone.now(), error_message='Processor reported failure')
                 break
-
-    except Exception as e:
-        print(f"[BG Worker] Unhandled error for {task_id}: {e}")
-        traceback.print_exc()
+    except Exception:
+        print(f"[BG Worker] Task {task_id} monitoring failed.")
         try:
-            task = ProcessingTask.objects.get(task_id=task_id)
-            if task.status not in ('completed', 'failed'):
-                task.status = 'failed'
-                task.completed_at = timezone.now()
-                task.error_message = f'Background worker error: {e}'
-                task.save()
+            ProcessingTask.objects.filter(pk=task_id, results_saved_at=None).exclude(status__in=['completed', 'cancelled']).update(
+                status='failed', completed_at=timezone.now(), error_message='Background monitoring failed')
         except Exception:
             pass
     finally:
         with _active_worker_lock:
-            global _active_worker_task_id
             if _active_worker_task_id == task_id:
                 _active_worker_task_id = None
         django.db.connections.close_all()
@@ -138,35 +115,18 @@ def _background_fetch_and_save(task_id, api_url, task):
     try:
         r = requests.get(f"{api_url}/results/{task_id}", headers=get_api_headers(), timeout=120)
         if r.status_code != 200:
-            task.status = 'failed'
-            task.error_message = f'Failed to fetch results: HTTP {r.status_code}'
-            task.save()
-            return
+            raise ValueError('Results unavailable')
 
         result = r.json()
 
-        new_count, skipped_count = save_results_to_database(result, task_id)
-
-        task.status = 'completed'
-        task.completed_at = timezone.now()
-        task.progress_percent = 100
-        task.txt_report = result.get('txt_report', '')
-        task.csv_data = result.get('csv_data', '')
-        task.new_records_added = new_count
-        task.existing_records_skipped = skipped_count
-        task.total_records_processed = new_count + skipped_count
-        if result.get('false_negatives'):
-            task.false_negatives_json = json.dumps(result['false_negatives'])
-        task.save()
+        from .submission import persist_result
+        new_count, skipped_count = persist_result(task_id, result)
         print(f"[BG Worker] Task {task_id}: saved {new_count} new, {skipped_count} skipped.")
 
-    except Exception as e:
-        print(f"[BG Worker] Error fetching/saving results for {task_id}: {e}")
-        traceback.print_exc()
-        task.status = 'failed'
-        task.completed_at = timezone.now()
-        task.error_message = f'Result save error: {e}'
-        task.save()
+    except Exception:
+        print(f"[BG Worker] Task {task_id} result persistence failed.")
+        ProcessingTask.objects.filter(pk=task_id, results_saved_at=None).exclude(status__in=['completed', 'cancelled']).update(
+            status='failed', completed_at=timezone.now(), error_message='Result persistence failed')
 
 
 def _start_background_worker(task_id):
@@ -176,7 +136,9 @@ def _start_background_worker(task_id):
 
     with _active_worker_lock:
         if _active_worker_task_id is not None:
-            return  # already monitoring
+            if _active_worker_task_id == task_id or ProcessingTask.objects.filter(
+                    pk=_active_worker_task_id, status__in=['queued', 'processing', 'saving']).exists():
+                return
         _active_worker_task_id = task_id
 
     t = threading.Thread(
@@ -427,14 +389,25 @@ def backfill_supplemental(request):
 
     task_id = str(uuid.uuid4())
 
-    task = ProcessingTask.objects.create(
-        task_id=task_id,
-        task_type='backfill',
-        status='processing',
-        supplemental_steps=True,
-        progress_message='Backfill queued…',
-        progress_percent=0,
-    )
+    from .submission import reserve_submission, release_submission, SubmissionError
+    from .models import SubmissionReservation
+    try:
+        reservation_token = reserve_submission()
+    except SubmissionError as exc:
+        return JsonResponse({'error': exc.code}, status=exc.status)
+    try:
+        task = ProcessingTask.objects.create(
+            task_id=task_id,
+            task_type='backfill',
+            status='processing',
+            supplemental_steps=True,
+            progress_message='Backfill queued…',
+            progress_percent=0,
+        )
+        SubmissionReservation.objects.filter(pk=1, token=reservation_token).update(task=task)
+    except Exception:
+        release_submission(reservation_token)
+        raise
 
     started = _start_backfill_worker(task_id, date_from, date_to)
     if not started:
@@ -466,7 +439,7 @@ def delete_task(request, task_id):
         return JsonResponse({'error': 'Task not found'}, status=404)
 
     # Don't allow deleting a currently-running task
-    if task.status in ('queued', 'processing'):
+    if task.status in ('queued', 'processing', 'saving'):
         return JsonResponse(
             {'error': 'Cannot delete a task that is still running. '
                       'Wait for it to complete or fail first.'},
@@ -502,134 +475,38 @@ def cancel_task(request, task_id):
 @csrf_exempt
 @require_http_methods(["POST"])
 def analyze_auto_sort(request):
-    """Proxy file upload to the API server with automatic sorting."""
-    active = _get_active_task()
-    if active:
-        return JsonResponse({
-            'error': f'A task is already running (ID: {active.task_id}). '
-                     f'Please wait for it to complete before starting another.'
-        }, status=409)
-
-    api_url = get_api_url()
-    
+    """Submit auto-sorted files through the shared processing reservation."""
+    from .submission import submit_files, SubmissionError
+    files = request.FILES.getlist('files')
+    if not files:
+        return JsonResponse({'error': 'No files uploaded'}, status=400)
+    forwarded = [('files', (f.name, f, f.content_type or 'application/octet-stream')) for f in files]
     try:
-        files = request.FILES.getlist('files')
-        if not files:
-            return JsonResponse({'error': 'No files uploaded'}, status=400)
-        
-        supplemental_steps = request.POST.get('supplemental_steps', 'false')
-        
-        # Prepare files for forwarding to API
-        files_to_send = []
-        for f in files:
-            files_to_send.append(('files', (f.name, f.read(), f.content_type or 'application/octet-stream')))
-        
-        # Forward to API
-        response = requests.post(
-            f"{api_url}/analyze-auto-sort",
-            files=files_to_send,
-            data={'supplemental_steps': supplemental_steps},
-            headers=get_api_headers(),
-            timeout=300
-        )
-        
-        if response.status_code != 200:
-            return JsonResponse({'error': response.text}, status=response.status_code)
-        
-        result = response.json()
-        
-        # Track task in Django DB for reference
-        task = ProcessingTask.objects.create(
-            task_id=result.get('task_id', ''),
-            status='queued',
-            progress_message='Submitted to API server',
-            supplemental_steps=(supplemental_steps.lower() == 'true')
-        )
-        
-        # Start background worker to poll and auto-save results
-        _start_background_worker(task.task_id)
-        
-        return JsonResponse(result)
-        
-    except ConnectionError:
-        return JsonResponse({
-            'error': f'Cannot connect to API server at {api_url}. Make sure combined_server.py is running.'
-        }, status=503)
-    except Timeout:
-        return JsonResponse({'error': 'API server request timed out'}, status=504)
-    except Exception as e:
-        traceback.print_exc()
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse(submit_files(forwarded, request.POST.get('supplemental_steps', 'false').lower() == 'true'))
+    except SubmissionError as exc:
+        return JsonResponse({'error': exc.code}, status=exc.status)
+    except Exception:
+        return JsonResponse({'error': 'Processing service unavailable'}, status=503)
 
 
 @login_required
 @csrf_exempt
 @require_http_methods(["POST"])
 def analyze_multiple(request):
-    """Proxy multiple file upload to the API server."""
-    active = _get_active_task()
-    if active:
-        return JsonResponse({
-            'error': f'A task is already running (ID: {active.task_id}). '
-                     f'Please wait for it to complete before starting another.'
-        }, status=409)
-
-    api_url = get_api_url()
-    
+    """Submit explicitly grouped files through the same reservation as auto-sort."""
+    from .submission import submit_files, SubmissionError
+    carpl_files = request.FILES.getlist('lunit_files')
+    ge_files = request.FILES.getlist('ground_truth_files')
+    if not carpl_files or not ge_files:
+        return JsonResponse({'error': 'Both CARPL and GE/RIS files are required'}, status=400)
+    forwarded = [(name, (f.name, f, f.content_type or 'application/octet-stream'))
+                 for name, files in [('lunit_files', carpl_files), ('ground_truth_files', ge_files)] for f in files]
     try:
-        carpl_files = request.FILES.getlist('lunit_files')
-        ge_files = request.FILES.getlist('ground_truth_files')
-        
-        if not carpl_files or not ge_files:
-            return JsonResponse({
-                'error': 'Both CARPL and GE/RIS files are required'
-            }, status=400)
-        
-        supplemental_steps = request.POST.get('supplemental_steps', 'false')
-        
-        # Prepare files for forwarding
-        files_to_send = []
-        for f in carpl_files:
-            files_to_send.append(('lunit_files', (f.name, f.read(), f.content_type or 'application/octet-stream')))
-        for f in ge_files:
-            files_to_send.append(('ground_truth_files', (f.name, f.read(), f.content_type or 'application/octet-stream')))
-        
-        # Forward to API
-        response = requests.post(
-            f"{api_url}/analyze-multiple",
-            files=files_to_send,
-            data={'supplemental_steps': supplemental_steps},
-            headers=get_api_headers(),
-            timeout=300
-        )
-        
-        if response.status_code != 200:
-            return JsonResponse({'error': response.text}, status=response.status_code)
-        
-        result = response.json()
-        
-        # Track task
-        task = ProcessingTask.objects.create(
-            task_id=result.get('task_id', ''),
-            status='queued',
-            progress_message='Submitted to API server',
-            supplemental_steps=(supplemental_steps.lower() == 'true')
-        )
-        
-        # Start background worker to poll and auto-save results
-        _start_background_worker(task.task_id)
-        
-        return JsonResponse(result)
-        
-    except ConnectionError:
-        return JsonResponse({
-            'error': f'Cannot connect to API server at {api_url}. Make sure combined_server.py is running.'
-        }, status=503)
-    except Timeout:
-        return JsonResponse({'error': 'API server request timed out'}, status=504)
-    except Exception as e:
-        traceback.print_exc()
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse(submit_files(forwarded, request.POST.get('supplemental_steps', 'false').lower() == 'true', endpoint='analyze-multiple'))
+    except SubmissionError as exc:
+        return JsonResponse({'error': exc.code}, status=exc.status)
+    except Exception:
+        return JsonResponse({'error': 'Processing service unavailable'}, status=503)
 
 
 @login_required
@@ -648,20 +525,8 @@ def get_status(request, task_id):
         
         result = response.json()
         
-        # Update local task tracking
-        try:
-            task = ProcessingTask.objects.get(task_id=task_id)
-            task.status = result.get('status', task.status)
-            task.progress_message = result.get('progress', '')
-            task.progress_percent = result.get('progress_percent', 0)
-            if result.get('progress_details'):
-                task.progress_step = result['progress_details'].get('step', '')
-                task.progress_current = result['progress_details'].get('current', 0)
-                task.progress_total = result['progress_details'].get('total', 0)
-            task.save()
-        except ProcessingTask.DoesNotExist:
-            pass
-        
+        _update_task_progress(task_id, result)
+
         return JsonResponse(result)
         
     except ConnectionError:
@@ -691,29 +556,12 @@ def get_results(request, task_id):
         
         result = response.json()
         
-        # Save results to database
-        new_count, skipped_count = save_results_to_database(result, task_id)
-        
-        # Add database stats to response
+        from .submission import persist_result
+        new_count, skipped_count = persist_result(task_id, result)
         result['new_records_added'] = new_count
         result['existing_records_skipped'] = skipped_count
         result['total_records_processed'] = new_count + skipped_count
-        
-        # Update local task
-        try:
-            task = ProcessingTask.objects.get(task_id=task_id)
-            task.status = 'completed'
-            task.txt_report = result.get('txt_report', '')
-            task.csv_data = result.get('csv_data', '')
-            task.new_records_added = new_count
-            task.existing_records_skipped = skipped_count
-            task.total_records_processed = new_count + skipped_count
-            if result.get('false_negatives'):
-                task.false_negatives_json = json.dumps(result['false_negatives'])
-            task.save()
-        except ProcessingTask.DoesNotExist:
-            pass
-        
+
         return JsonResponse(result)
         
     except ConnectionError:
@@ -940,7 +788,7 @@ def precheck_files(request):
 
 # ============ Database Helper Functions ============
 
-def save_results_to_database(api_result, batch_id):
+def save_results_to_database(api_result, batch_id, *, strict=False):
     """
     Save processed results from API to the CXRStudy database.
     Checks if accession number exists before adding.
@@ -956,11 +804,15 @@ def save_results_to_database(api_result, batch_id):
     
     csv_data = api_result.get('csv_data', '')
     if not csv_data:
+        if strict:
+            raise ValueError("Missing result CSV")
         return new_count, skipped_count
     
     try:
         df = pd.read_csv(StringIO(csv_data))
     except Exception as e:
+        if strict:
+            raise
         print(f"Error parsing CSV data: {e}")
         traceback.print_exc()
         return new_count, skipped_count
@@ -1071,11 +923,15 @@ def save_results_to_database(api_result, batch_id):
     for _, row in df.iterrows():
         accession_no = row.get('ACCESSION_NO')
         if pd.isna(accession_no):
+            if strict:
+                raise ValueError('Missing accession in result CSV')
             continue
         
         try:
             accession_no = int(accession_no)
         except (ValueError, TypeError):
+            if strict:
+                raise ValueError('Invalid accession in result CSV') from None
             continue
         
         # Check if exists
@@ -1119,6 +975,8 @@ def save_results_to_database(api_result, batch_id):
             CXRStudy.objects.create(**model_data)
             new_count += 1
         except Exception as e:
+            if strict:
+                raise
             print(f"Error saving accession {accession_no}: {e}")
             traceback.print_exc()
     

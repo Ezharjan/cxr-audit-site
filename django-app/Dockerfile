@@ -36,6 +36,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Copy installed Python dependencies from the builder stage.
 COPY --from=builder /install /usr/local
 
+# Install the pinned Chromium revision and runtime libraries for PDF rendering.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/primer-browsers
+RUN python -m playwright install --with-deps chromium && chmod -R a+rX /opt/primer-browsers
+
 # Copy application code
 COPY manage.py .
 COPY lunit_audit/ lunit_audit/
@@ -45,6 +49,7 @@ COPY report/ report/
 COPY report_v2/ report_v2/
 COPY gt/ gt/
 COPY audit/ audit/
+COPY agent_api/ agent_api/
 COPY templates/ templates/
 COPY static/ static/
 

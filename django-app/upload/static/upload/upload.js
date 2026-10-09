@@ -358,6 +358,7 @@ async function checkStatus() {
 function guessPct(status, txt) {
     if (status === 'completed') return 100;
     if (status === 'failed') return 0;
+    if (status === 'saving') return 95;
     if (status !== 'processing') return 5;
     if (!txt) return 15;
     if (txt.includes('Initializing')) return 8;

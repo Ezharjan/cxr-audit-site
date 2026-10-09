@@ -117,6 +117,54 @@ def _entry_state(widget: dict, entry: dict) -> tuple[dict | None, dict, str | No
     return _validate_overrides(widget, entry)
 
 
+def _freeze_widgets(layout, plan, project_id):
+    # The evaluation pass: one ORM read per widget, fault-isolated per frame (a bad
+    # widget freezes its error string exactly like the page render does).
+    frozen_widgets: list[dict[str, Any]] = []
+    for widget, entry, date_override, filters, comparison, grouping, page in plan:
+        try:
+            rows = [] if widget.get("type") in {"text", "divider", "heading"} else data.fetch_project_rows(project_id, layout_widget=widget)
+            payload = _evaluate(
+                layout, widget,
+                date_override=date_override, filters=filters,
+                comparison=comparison, grouping=grouping, page=page, rows=rows,
+                time_grouping=entry.get("time_grouping"),
+            )
+        except (EvaluationError, data.AdapterError) as exc:
+            payload = {"widget_id": widget.get("id"), "error": str(exc)}
+        except Exception as exc:  # fault isolation: one frame must not kill the export
+            payload = {"widget_id": widget.get("id"), "error": str(exc)}
+        frozen_widgets.append(
+            {
+                "widget_id": widget.get("id"),
+                "title": widget.get("title"),
+                "type": widget.get("type"),
+                "section_id": None,
+                "export": widget.get("export"),
+                "applied": {
+                    "date": entry.get("date"),
+                    "filters": dict(filters or {}),
+                    "comparison": comparison,
+                    "time_grouping": entry.get("time_grouping"),
+                    "page": page,
+                },
+                "payload": payload,
+            }
+        )
+    return frozen_widgets
+
+
+def default_document(project_id, slug):
+    """Freeze published defaults without browser preferences or request overrides."""
+    version, layout = data.load_published_layout(slug, project_id)
+    plan = [(widget, {}, None, {}, None, None, 1) for widget in _layout_widgets(layout).values()]
+    frozen = _freeze_widgets(layout, plan, project_id)
+    if any(widget["payload"].get("error") or widget["payload"].get("errors") for widget in frozen):
+        raise EvaluationError("default export evaluation failed")
+    return {"kind": _SNAPSHOT_KIND, "project_id": project_id, "slug": slug, "version": version,
+            "title": layout.get("title"), "generated": datetime.now(_tz.utc).isoformat(), "widgets": frozen}
+
+
 @login_required
 @require_POST
 @csrf_protect
@@ -206,39 +254,7 @@ def create_snapshot(request, slug: str):
         return JsonResponse({"error": "snapshot must cover every published widget exactly once",
                              "status": "rejected"}, status=400)
 
-    # The evaluation pass: one ORM read per widget, fault-isolated per frame (a bad
-    # widget freezes its error string exactly like the page render does).
-    frozen_widgets: list[dict[str, Any]] = []
-    for widget, entry, date_override, filters, comparison, grouping, page in plan:
-        try:
-            rows = [] if widget.get("type") in {"text", "divider", "heading"} else data.fetch_project_rows(_PROJECT_ID, layout_widget=widget)
-            payload = _evaluate(
-                layout, widget,
-                date_override=date_override, filters=filters,
-                comparison=comparison, grouping=grouping, page=page, rows=rows,
-                time_grouping=entry.get("time_grouping"),
-            )
-        except (EvaluationError, data.AdapterError) as exc:
-            payload = {"widget_id": widget.get("id"), "error": str(exc)}
-        except Exception as exc:  # fault isolation: one frame must not kill the export
-            payload = {"widget_id": widget.get("id"), "error": str(exc)}
-        frozen_widgets.append(
-            {
-                "widget_id": widget.get("id"),
-                "title": widget.get("title"),
-                "type": widget.get("type"),
-                "section_id": None,
-                "export": widget.get("export"),
-                "applied": {
-                    "date": entry.get("date"),
-                    "filters": dict(filters or {}),
-                    "comparison": comparison,
-                    "time_grouping": entry.get("time_grouping"),
-                    "page": page,
-                },
-                "payload": payload,
-            }
-        )
+    frozen_widgets = _freeze_widgets(layout, plan, _PROJECT_ID)
 
     document = {
         "kind": _SNAPSHOT_KIND,

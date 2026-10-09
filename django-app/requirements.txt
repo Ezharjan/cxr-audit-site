@@ -1,5 +1,5 @@
 # Django project requirements
-Django>=5.0
+Django>=5.1
 pandas>=2.0
 numpy>=1.24
 openpyxl>=3.1
@@ -15,3 +15,6 @@ psycopg[binary]>=3.1.8
 # report_v2 definition loader (schema validation + YAML report definitions)
 jsonschema>=4.17
 pyyaml>=6.0
+
+# Chromium-based server PDF rendering (browser revision pinned by Playwright).
+playwright==1.62.0

@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     # Local apps
     "audit.apps.AuditConfig",
+    "agent_api.apps.AgentAPIConfig",
     "upload.apps.UploadConfig",
     "viewer.apps.ViewerConfig",
     "report.apps.ReportConfig",

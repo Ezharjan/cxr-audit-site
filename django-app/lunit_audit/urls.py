@@ -25,6 +25,7 @@ from django.shortcuts import redirect
 from django.views.generic.base import RedirectView
 
 urlpatterns = [
+    path("", include("agent_api.urls")),
     path("", lambda request: redirect("upload:index")),
     path("admin/", admin.site.urls),
     path("login/", auth_views.LoginView.as_view(template_name="registration/login.html"), name="login"),

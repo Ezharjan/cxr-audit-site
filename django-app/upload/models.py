@@ -133,6 +133,7 @@ class ProcessingTask(models.Model):
     STATUS_CHOICES = [
         ('queued', 'Queued'),
         ('processing', 'Processing'),
+        ('saving', 'Saving results'),
         ('completed', 'Completed'),
         ('failed', 'Failed'),
         ('cancelled', 'Cancelled'),
@@ -153,6 +154,8 @@ class ProcessingTask(models.Model):
     csv_data = models.TextField(blank=True, null=True, verbose_name="CSV Data")
     error_message = models.TextField(blank=True, null=True, verbose_name="Error Message")
     
+    results_saved_at = models.DateTimeField(null=True, blank=True)
+
     # Statistics
     total_records_processed = models.IntegerField(default=0, verbose_name="Total Records Processed")
     new_records_added = models.IntegerField(default=0, verbose_name="New Records Added")
@@ -231,3 +234,13 @@ class UploadedFile(models.Model):
     
     def __str__(self):
         return f"{self.original_filename} ({self.file_type})"
+
+
+class SubmissionReservation(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    token = models.UUIDField(null=True)
+    task = models.ForeignKey(ProcessingTask, null=True, on_delete=models.SET_NULL)
+    acquired_at = models.DateTimeField(null=True)
+
+    class Meta:
+        constraints = [models.CheckConstraint(condition=models.Q(id=1), name="upload_submission_singleton")]
