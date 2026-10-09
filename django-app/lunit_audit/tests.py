@@ -122,10 +122,9 @@ class VisualShellTemplateTests(TestCase):
         for label in ("Tasks", "Import", "Database", "Report editor"):
             self.assertIn(label, html)
 
-    def test_admin_categories_group_links_and_open_active_category(self):
+    def test_admin_categories_group_links_and_start_expanded(self):
         user = User.objects.create_user(username="category-admin", is_superuser=True)
-        for path, active_title in (("/upload/tasks/", "Admin"), ("/upload/import/", "Admin"),
-                                   ("/editor/", "More tools"), ("/view/", "More tools"), ("/gt/", "More tools")):
+        for path in ("/report/", "/upload/tasks/", "/upload/import/", "/editor/", "/view/", "/gt/"):
             with self.subTest(path=path):
                 html = self._render_shell(user, path=path)
                 self.assertEqual(html.count('aria-current="page"'), 1)
@@ -135,14 +134,14 @@ class VisualShellTemplateTests(TestCase):
                                                    (("Report editor", "Database", "Manual GT"), ("Tasks", "Import"))):
                     opening, content = category.split(">", 1)
                     content = content.split("</details>", 1)[0]
-                    self.assertEqual("open" in opening, title == active_title)
+                    self.assertIn("open", opening)
                     self.assertIn(f'<summary class="nav-category-title">{title}</summary>', content)
                     for label in labels:
                         self.assertIn(f"<span>{label}</span>", content)
 
     def test_regular_user_has_no_admin_categories(self):
         html = self._render_shell(User.objects.create_user(username="category-reviewer"))
-        self.assertEqual(html.count('<details class="nav-category"'), 1)
+        self.assertEqual(html.count('<details class="nav-category" open>'), 1)
         self.assertIn('<summary class="nav-category-title">More tools</summary>', html)
         self.assertIn("<span>Manual GT</span>", html)
         self.assertNotIn('<summary class="nav-category-title">Admin</summary>', html)

@@ -61,7 +61,7 @@
             <a href="{% url 'report:index' %}" class="nav-item {% block nav_report_v1 %}{% endblock %}"{% if request.resolver_match.namespace == 'report' %} aria-current="page"{% endif %}>
                 <svg class="nav-icon" aria-hidden="true"><use href="#icon-report"/></svg><span>Report V1</span>
             </a>
-            <details class="nav-category"{% if request.resolver_match.namespace == 'report_editor' or request.resolver_match.namespace == 'viewer' or request.resolver_match.namespace == 'gt' %} open{% endif %}>
+            <details class="nav-category" open>
                 <summary class="nav-category-title">More tools</summary>
                 {% if user.is_superuser or is_admin %}
                 <a href="{% url 'report_editor:editor' %}" class="nav-item {% block nav_report_editor %}{% endblock %}"{% if request.resolver_match.namespace == 'report_editor' %} aria-current="page"{% endif %}>
@@ -76,7 +76,7 @@
                 </a>
             </details>
             {% if user.is_superuser or is_admin %}
-            <details class="nav-category"{% if request.resolver_match.view_name == 'upload:tasks_list' or request.resolver_match.view_name == 'upload:import_data' %} open{% endif %}>
+            <details class="nav-category" open>
                 <summary class="nav-category-title">Admin</summary>
                 <a href="{% url 'upload:tasks_list' %}" class="nav-item {% block nav_tasks %}{% endblock %}"{% if request.resolver_match.view_name == 'upload:tasks_list' %} aria-current="page"{% endif %}>
                     <svg class="nav-icon" aria-hidden="true"><use href="#icon-tasks"/></svg><span>Tasks</span>
