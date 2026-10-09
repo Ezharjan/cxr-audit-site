@@ -1,5 +1,6 @@
 ---
-status: ready_for_execution
+status: implemented
+production_verification: pending_docker_nginx_postgres
 executor: Sol
 created: 2026-10-09
 scope: authenticated routine-workflow API and admin configuration
