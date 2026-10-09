@@ -272,11 +272,34 @@ img, svg {
 }
 
 .nav-category-title {
+    display: flex;
+    min-height: 42px;
+    align-items: center;
+    gap: 11px;
+    list-style: none;
     padding: 9px 12px;
     color: var(--c-text-muted);
     font-size: 15px;
     font-weight: 600;
     cursor: pointer;
+}
+
+.nav-category-title::-webkit-details-marker {
+    display: none;
+}
+
+.nav-category-title::before {
+    content: "\25B6";
+    display: grid;
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    place-items: center;
+    font-size: 10px;
+}
+
+.nav-category[open] > .nav-category-title::before {
+    content: "\25BC";
 }
 
 .nav-category-title:focus-visible {
