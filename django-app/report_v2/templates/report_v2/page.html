@@ -22,7 +22,7 @@
         <button type="button" class="btn btn-primary" data-action="print">Print / Save as PDF</button>
         <button type="button" class="btn btn-secondary" data-action="email">Email report</button>
         {% if is_admin %}
-        <a class="btn btn-secondary" href="{% url 'report_editor:editor_detail' def_id=slug %}" data-role="edit-layout">Edit layout</a>
+        <a class="btn btn-secondary" href="{{ editor_url }}" data-role="edit-layout">Edit report</a>
         {% endif %}
         <span class="print-status" data-role="print-status" role="status"></span>
     </p>

@@ -647,6 +647,11 @@ def report_page(request, slug: str):
         "is_admin": can_edit_catalog(request.user),
         "legacy_report_url": reverse("report:index"),
     }
+    if context["is_admin"]:
+        from .admin_views import _report_entries, _repository
+        context["editor_url"] = next(
+            entry["editor_url"] for entry in _report_entries(_repository()) if entry["def_id"] == slug
+        )
     return render(request, "report_v2/page.html", context)
 
 

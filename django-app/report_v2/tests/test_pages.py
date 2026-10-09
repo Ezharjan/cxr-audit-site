@@ -312,11 +312,11 @@ class PublishedReportPageTests(TestCase):
             ordinary = self._page(self._login(self.normal, enforce_csrf=False), "t13report")
             admin = self._page(self._login(self.admin, enforce_csrf=False), "t13report")
 
-        for forbidden in ("Edit layout", "/report/layout/", "draft"):
+        for forbidden in ("Edit report", "/report/layout/", "draft"):
             with self.subTest(token=forbidden):
                 self.assertNotIn(forbidden, ordinary)
         toolbar = re.search(r'<p class="report-v2-exportbar">(.*?)</p>', admin, re.S).group(1)
-        self.assertRegex(toolbar, r'(?s)data-action="email".*?</button>\s*<a class="btn btn-secondary"[^>]*data-role="edit-layout">Edit layout</a>')
+        self.assertRegex(toolbar, r'(?s)data-action="email".*?</button>\s*<a class="btn btn-secondary"[^>]*data-role="edit-layout">Edit report</a>')
         self.assertEqual(admin.count('data-role="edit-layout"'), 1)
 
     # -- 4. the server-issued context token pins the version, and tampering is refused -----
@@ -632,14 +632,28 @@ class PublishedReportPageTests(TestCase):
         )
 
     # -- 14A. the admin Edit-layout link is report-specific, ordinary users get no affordance ----- #
+    def test_report_edit_link_matches_catalog_with_duplicate_titles(self):
+        self._publish("first")
+        self._publish("second")
+        client = self._login(self.admin, enforce_csrf=False)
+        catalog = client.get("/editor/").content.decode()
+        for slug in ("first", "second"):
+            url = f"/editor/task_13_report__{slug}/"
+            self.assertIn(f'href="{url}"', catalog)
+            self.assertIn(f'href="{url}"', self._page(client, slug))
+            self.assertEqual(client.get(url).status_code, 200)
+
     def test_admin_edit_layout_links_to_report_specific_editor(self):
         self._publish("t13report")
         with mock.patch("report_v2.data.fetch_project_rows", side_effect=_make_seam(empty_ids={"v2"})):
             admin = self._page(self._login(self.admin, enforce_csrf=False), "t13report")
             ordinary = self._page(self._login(self.normal, enforce_csrf=False), "t13report")
-        self.assertIn('href="/editor/t13report/"', admin)
+        self.assertIn('href="/editor/task_13_report/"', admin)
+        self.assertIn('>Edit report</a>', admin)
+        response = self._login(self.admin, enforce_csrf=False).get("/editor/task_13_report/")
+        self.assertEqual(response.status_code, 200)
         self.assertIn('data-role="edit-layout"', admin)
-        for forbidden in ("Edit layout", "/report/layout/"):
+        for forbidden in ("Edit report", "/report/layout/"):
             with self.subTest(token=forbidden):
                 self.assertNotIn(forbidden, ordinary)
 

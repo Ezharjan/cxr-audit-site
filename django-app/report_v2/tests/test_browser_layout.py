@@ -621,7 +621,7 @@ class BrowserLayoutTests(unittest.TestCase):
     def test_editor_navigation_from_admin_page(self):
         self._goto(self.report_url, width=1440, height=900)
         link = self.page.locator('[data-role="edit-layout"]').first
-        self.assertEqual(link.get_attribute("href"), f"/editor/{DEF_ID}/")
+        self.assertEqual(link.get_attribute("href"), "/editor/browser_layout_14a/")
         editor_url = self.server.base + link.get_attribute("href")
         link.click()
         self.page.wait_for_load_state("networkidle")
@@ -648,7 +648,7 @@ class BrowserLayoutTests(unittest.TestCase):
         ordinary_code, ordinary_body, _ = self.server.get(f"/report/{DEF_ID}/", jar=jar, opener=opener)
         self.assertEqual(ordinary_code, 200)
         self.assertNotIn('data-role="edit-layout"', ordinary_body)
-        self.assertNotIn("Edit layout", ordinary_body)
+        self.assertNotIn("Edit report", ordinary_body)
 
     # -- 5. the legacy report route is untouched --------------------------------------------- #
     def test_legacy_report_untouched(self):
