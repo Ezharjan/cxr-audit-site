@@ -422,6 +422,11 @@ def _evaluate(
         widget_inputs=dict((widget.get("query") or {}).get("inputs") or {}),
     )
     payload = result.to_dict()
+    from .thresholds import threshold_metadata, threshold_caption
+    thresholds = threshold_metadata(widget.get("query") or {}, project)
+    if thresholds:
+        payload["lunit_thresholds"] = thresholds
+        payload["caption"] = " ".join(filter(None, [payload.get("caption"), threshold_caption(thresholds)]))
     payload["group_options"] = group_options
     if is_summary_table:
         # Group cardinality is already bounded to 100; show every summary group together.
@@ -726,6 +731,7 @@ def widget_data(request, slug: str, widget_id: str):
         is_table = widget["type"] == "table"
         # Gates above run on every request, including cache hits. No PHI in cache keys.
         scope = {key: value for key, value in body.items() if key not in {"page", "request_seq"}}
+        scope["widget_definition"] = widget
         scope["user"] = request.user.pk
         scope["session"] = request.session.session_key
         key = hashlib.sha256(json.dumps(scope, sort_keys=True).encode()).hexdigest()
@@ -903,6 +909,7 @@ def report_csv(request, slug: str, kind: str):
         f"# filters={json.dumps(filters, sort_keys=True, default=str)}",
         f"# version={version}",
         f"# policy={(widget_def.get('query') or {}).get('threshold_policy') or '-'}",
+        f"# lunit_thresholds={json.dumps(payload.get('lunit_thresholds'), sort_keys=True)}",
         f"# kind={kind}",
     ]
     for line in trailer:

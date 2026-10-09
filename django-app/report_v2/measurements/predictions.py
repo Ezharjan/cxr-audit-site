@@ -243,6 +243,7 @@ def classify_prediction(
     policy_ref: str,
     registry=None,
     outcome_id: str = "abnormal_lunit",
+    threshold_settings: Mapping | None = None,
 ) -> PredictionResult:
     """Validate inputs, bin each covered finding with the explicit ``gt`` operator and aggregate.
 
@@ -262,6 +263,22 @@ def classify_prediction(
     policy = project.policy(policy_ref)
     if not isinstance(policy, ThresholdPolicy):
         raise MissingPolicyError(f"resolved reference {policy_ref!r} for project {project_id!r} is not a ThresholdPolicy")
+
+    if threshold_settings is not None:
+        from ..thresholds import configure_policy
+        try:
+            policy = configure_policy(policy, threshold_settings)
+        except ValueError as exc:
+            raise InvalidPolicyConfigurationError(str(exc)) from exc
+
+    return _classify_policy_prediction(findings, project=project, policy=policy, outcome_id=outcome_id)
+
+
+def _classify_policy_prediction(findings, *, project, policy, outcome_id="abnormal_lunit"):
+    """Classify under a card's already-resolved policy; retain score and missing-data validation."""
+    if not isinstance(findings, Mapping):
+        raise TypeError("findings must be a Mapping")
+    project_id = project.project_id
 
     # (B.3) score_scale guard: a finite, strictly increasing [lo, hi] pair.
     scale = tuple(policy.score_scale)

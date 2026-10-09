@@ -19,6 +19,43 @@ class VisualEditorBrowserTests(unittest.TestCase):
     def draft(self):
         return load_report_definition(self.page.locator('#id_yaml_text').input_value())
 
+    def test_per_card_lunit_thresholds_roundtrip_and_reset(self):
+        self.page.goto(self.server.base + '/editor/browser_layout_14a/')
+        self.ready()
+        original = self.page.locator('#id_yaml_text').input_value()
+        card = self.page.locator('[data-widget-id=bl]')
+        card.hover(); card.locator('[data-visual-action=edit]').click()
+        form = self.page.locator('[data-role=card-options-form]')
+        form.locator('[name=measurement]').select_option('accuracy')
+        form.locator('select[data-role=ground_truth]').select_option('pneumothorax_llm')
+        form.locator('select[data-role=prediction]').select_option('lunit_findings')
+        form.locator('details > summary').click()
+        form.locator('[name=policy]').select_option('lunit-defaults@1')
+        self.assertTrue(form.locator('[data-role=lunit-threshold-options]').is_visible())
+        form.locator('[name=lunit_default]').fill('95')
+        for checkbox in form.locator('[name=lunit_findings]').all():
+            checkbox.set_checked(checkbox.get_attribute('value') == 'pneumothorax')
+        form.locator('[data-finding=pneumothorax]').fill('96')
+        form.locator('[type=submit]').click()
+        self.page.locator('[data-role=card-options]').wait_for(state='hidden'); self.ready()
+        query = next(w for w in self.draft()['sections'][0]['widgets'] if w['id'] == 'bl')['query']
+        self.assertEqual(query['lunit_thresholds'], {'findings': ['pneumothorax'], 'default': 95,
+                                                   'overrides': {'pneumothorax': 96}})
+        card = self.page.locator('[data-widget-id=bl]')
+        card.hover(); card.locator('[data-visual-action=edit]').click()
+        self.assertEqual(form.locator('[name=lunit_default]').input_value(), '95')
+        self.assertEqual(form.locator('[data-finding=pneumothorax]').input_value(), '96')
+        if not form.locator('details').evaluate('(node) => node.open'):
+            form.locator('details > summary').click()
+        form.locator('[data-visual-action=reset-thresholds]').click()
+        form.locator('[type=submit]').click()
+        self.page.locator('[data-role=card-options]').wait_for(state='hidden'); self.ready()
+        query = next(w for w in self.draft()['sections'][0]['widgets'] if w['id'] == 'bl')['query']
+        self.assertNotIn('lunit_thresholds', query)
+        self.page.locator('[data-visual-action=undo]').click(); self.ready()
+        self.page.locator('[data-visual-action=undo]').click(); self.ready()
+        self.assertEqual(self.page.locator('#id_yaml_text').input_value(), original)
+
     def test_card_deletion_requires_confirmation(self):
         self.page.goto(self.server.base + '/editor/browser_layout_14a/')
         self.ready()

@@ -37,7 +37,7 @@ from .definitions.repository import (
     validate_definition_id,
 )
 from .projects.base import ProjectCatalogError, UnknownSourceError
-from .measurements.predictions import classify_prediction, PolicyEvaluationError
+from .measurements.predictions import _classify_policy_prediction, PolicyEvaluationError
 from .projects.prime import get_project_definition
 
 __all__ = [
@@ -278,6 +278,14 @@ def fetch_project_rows(
         # Refuse to fabricate a clinical population rule for a cohort this adapter cannot evaluate.
         raise AdapterError(f"unsupported cohort {cohort!r}; this adapter knows only {sorted(_SUPPORTED_COHORTS)}")
 
+    policy = None
+    if "lunit_findings" in inputs.values() or "lunit_thresholds" in query:
+        from .thresholds import widget_policy
+        try:
+            policy = widget_policy(query, project)
+        except (ValueError, ProjectCatalogError) as exc:
+            raise AdapterError(str(exc)) from exc
+
     queryset = CXRStudy.objects.all().order_by("accession_no")
     if limit is not None:
         queryset = queryset[:limit]
@@ -293,13 +301,9 @@ def fetch_project_rows(
 
         _map_inputs(row, study, inputs, measurement, project)
         if "lunit_findings" in inputs.values():
-            policy_ref = query.get("threshold_policy")
-            if not policy_ref:
-                raise AdapterError("Lunit findings require a threshold policy")
             try:
-                policy = project.policy(policy_ref)
                 findings = {name: getattr(study, name, None) for name in policy.findings}
-                prediction = classify_prediction(findings, project_id=project_id, policy_ref=policy_ref)
+                prediction = _classify_policy_prediction(findings, project=project, policy=policy)
             except (ProjectCatalogError, PolicyEvaluationError) as exc:
                 raise AdapterError("Lunit findings could not be classified under the selected policy") from exc
             for role, source_id in inputs.items():

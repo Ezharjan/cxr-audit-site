@@ -71,6 +71,13 @@
             <div class="card-optional">
                 <label>Population<select name="cohort"></select></label>
                 <label>Threshold policy<select name="policy"></select></label>
+                <fieldset data-role="lunit-threshold-options" hidden>
+                    <legend>Lunit thresholds for this table or graph</legend>
+                    <p class="editor-help">Positive means any included finding has a score strictly above its cutoff. Choose the matching LLM finding as the reference for a single-finding analysis.</p>
+                    <label>Default cutoff<input name="lunit_default" type="number" min="0" max="100" step="any" placeholder="Use policy defaults"></label>
+                    <div data-role="lunit-finding-options"></div>
+                    <button type="button" class="btn btn-outline" data-visual-action="reset-thresholds">Reset to policy defaults</button>
+                </fieldset>
                 <div class="card-size-fields"><label>From<input name="start" placeholder="M or YYYY-MM-DD"></label><label>To<input name="end" placeholder="D or YYYY-MM-DD"></label></div>
                 <p class="editor-help">D = latest date, M = start of month, D-30 = thirty days earlier. Dates use YYYY-MM-DD.</p>
                 <label data-line>Time interval<select name="bucket"><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option><option value="year">Year</option></select></label>

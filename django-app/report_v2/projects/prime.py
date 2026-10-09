@@ -105,6 +105,8 @@ def _build_sources():
                 description="Numeric Lunit score on the policy score scale.",
             )
         )
+    sources.extend(Source(f"{finding}_llm", "label", f"{finding}_llm",
+                          label=f"LLM {finding.replace('_', ' ')}") for finding in _POLICY_FINDINGS)
     return {source.source_id: source for source in sources}
 
 

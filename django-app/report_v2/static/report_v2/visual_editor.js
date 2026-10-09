@@ -182,6 +182,33 @@
       form.querySelector('[data-role="column-options"]').hidden = type !== "table";
       form.querySelector('[data-role="benchmark-options"]').hidden = ["value", "line", "bar", "boxplot"].indexOf(type) < 0;
     }
+    function thresholdGuide(settings) {
+      var box = form.querySelector('[data-role="lunit-threshold-options"]');
+      var usesLunit = Array.from(form.querySelectorAll('[data-role="source-options"] select')).some(function (node) { return node.value === "lunit_findings"; });
+      var policy = catalog.policies.find(function (p) { return p.id === field("policy").value; });
+      box.hidden = !usesLunit || !policy;
+      box.querySelectorAll("input").forEach(function (node) {
+        node.disabled = box.hidden || (node.dataset.finding && checked("lunit_findings").indexOf(node.dataset.finding) < 0);
+      });
+      if (settings === undefined) { return; }
+      settings = settings || {};
+      field("lunit_default").value = settings.default === undefined ? "" : settings.default;
+      var list = form.querySelector('[data-role="lunit-finding-options"]'); list.replaceChildren();
+      if (!policy) { return; }
+      Object.keys(policy.findings).forEach(function (finding) {
+        var row = el("div", undefined, "card-size-fields"), label = el("label", undefined, "card-check");
+        var include = el("input"); include.type = "checkbox"; include.name = "lunit_findings"; include.value = finding;
+        include.checked = !settings.findings || settings.findings.indexOf(finding) >= 0;
+        label.append(include, document.createTextNode(finding.replace(/_/g, " ")));
+        var overrideLabel = el("label", "Cutoff override"), cutoff = el("input"); cutoff.type = "number";
+        cutoff.min = policy.score_scale[0]; cutoff.max = policy.score_scale[1]; cutoff.step = "any";
+        cutoff.dataset.finding = finding; cutoff.placeholder = "Use default cutoff or policy (" + policy.findings[finding] + ")";
+        cutoff.value = (settings.overrides || {})[finding] === undefined ? "" : settings.overrides[finding];
+        cutoff.disabled = box.hidden || !include.checked;
+        include.addEventListener("change", function () { cutoff.disabled = !include.checked; });
+        overrideLabel.appendChild(cutoff); row.append(label, overrideLabel); list.appendChild(row);
+      });
+    }
     function addTarget(target) {
       var row = el("div", undefined, "card-target-row");
       var label = el("input"), value = el("input"), remove = button("Remove", "remove-target");
@@ -207,6 +234,7 @@
       choices(field("cohort"), catalog.cohorts, query.cohort, "All eligible records");
       choices(field("policy"), catalog.policies, query.threshold_policy, "None (label predictions)");
       refreshGuide(true);
+      thresholdGuide(query.lunit_thresholds || {});
       form.querySelector('[data-role="benchmark-list"]').replaceChildren(); (current.benchmarks || []).forEach(addTarget);
       var deleting = form.querySelector('[data-visual-action="delete-card"]'); deleting.hidden = !card; deleting.disabled = section.widgets.length === 1;
       root.querySelector("#cardOptionsTitle").textContent = card ? "Edit card" : "Add card";
@@ -226,6 +254,19 @@
       card.query = Object.assign({}, oldQuery, { measurement: m.id, inputs: {} });
       form.querySelectorAll('[data-role="source-options"] select').forEach(function (node) { if (node.value) { card.query.inputs[node.dataset.role] = node.value; } });
       [ ["cohort", "cohort"], ["threshold_policy", "policy"] ].forEach(function (pair) { if (field(pair[1]).value) { card.query[pair[0]] = field(pair[1]).value; } else { delete card.query[pair[0]]; } });
+      delete card.query.lunit_thresholds;
+      if (!form.querySelector('[data-role="lunit-threshold-options"]').hidden) {
+        var findings = checked("lunit_findings"), settings = {}, overrides = {};
+        if (!findings.length) { throw new Error("Include at least one Lunit finding."); }
+        var policy = catalog.policies.find(function (p) { return p.id === field("policy").value; });
+        if (findings.length !== Object.keys(policy.findings).length) { settings.findings = findings; }
+        if (field("lunit_default").value !== "") { settings.default = Number(field("lunit_default").value); }
+        form.querySelectorAll('[data-finding]').forEach(function (node) {
+          if (!node.disabled && node.value !== "") { overrides[node.dataset.finding] = Number(node.value); }
+        });
+        if (Object.keys(overrides).length) { settings.overrides = overrides; }
+        if (Object.keys(settings).length) { card.query.lunit_thresholds = settings; }
+      }
       card.window = { start: field("start").value.trim(), end: field("end").value.trim() };
       card.controls = { date_range: true, filters: checked("filters"), compare_by: checked("comparison") };
       delete card.default_compare_by; if (field("default_group").value) { card.default_compare_by = field("default_group").value; }
@@ -328,14 +369,20 @@
     });
     form.addEventListener("submit", function (event) { event.preventDefault(); submit(false); });
     field("type").addEventListener("change", function () {
-      refreshGuide(true);
+      refreshGuide(true); thresholdGuide();
       if (!selected.card) {
         if (Object.values(TYPES).some(function (type) { return type[0] === field("title").value; })) { field("title").value = TYPES[field("type").value][0]; }
         var preset = catalog.presets[field("type").value];
         field("width").value = preset[0]; field("height").value = preset[1];
       }
     });
-    field("measurement").addEventListener("change", function () { refreshGuide(false); });
+    field("measurement").addEventListener("change", function () { refreshGuide(false); thresholdGuide(); });
+    field("policy").addEventListener("change", function () { thresholdGuide({}); });
+    form.querySelector('[data-role="source-options"]').addEventListener("change", function () {
+      if (!form.querySelector('[data-role="lunit-finding-options"]').children.length) { thresholdGuide({}); }
+      else { thresholdGuide(); }
+    });
+    form.querySelector('[data-visual-action="reset-thresholds"]').addEventListener("click", function () { thresholdGuide({}); });
     form.querySelector('[data-role="comparison-options"]').addEventListener("change", function () {
       choices(field("default_group"), catalog.dimensions.filter(function (d) { return checked("comparison").indexOf(d.id) >= 0; }), field("default_group").value, "None");
     });

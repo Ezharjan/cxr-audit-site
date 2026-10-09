@@ -122,6 +122,38 @@
                     "target_class": {
                       "type": "string",
                       "minLength": 1
+                    },
+                    "lunit_thresholds": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "additionalProperties": false,
+                      "properties": {
+                        "default": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "findings": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 10,
+                          "uniqueItems": true,
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "overrides": {
+                          "type": "object",
+                          "minProperties": 1,
+                          "maxProperties": 10,
+                          "additionalProperties": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
+                          }
+                        }
+                      }
                     }
                   },
                   "required": [

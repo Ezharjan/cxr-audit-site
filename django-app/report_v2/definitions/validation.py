@@ -243,6 +243,20 @@ def validate_display(
 
     query: Mapping[str, Any] = config.get("query") or {}
 
+    widgets = config.get("widgets") or [w for section in config.get("sections", []) for w in section["widgets"]] or [config]
+    for widget in widgets:
+        widget_query = widget.get("query") or {}
+        if "lunit_thresholds" in widget_query:
+            from ..projects.prime import get_project_definition
+            from ..projects.base import ProjectCatalogError
+            from ..thresholds import widget_policy
+            try:
+                if config.get("project", "prime") != "prime":
+                    raise ValueError("Custom Lunit cutoffs require the prime project.")
+                widget_policy(widget_query, get_project_definition())
+            except (ValueError, ProjectCatalogError) as exc:
+                raise DisplayValidationError(str(exc)) from exc
+
     # 1. Inputs.
     if allowed_inputs is not None:
         for key in query.get("inputs") or {}:

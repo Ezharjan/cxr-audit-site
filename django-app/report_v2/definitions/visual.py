@@ -31,7 +31,8 @@ def catalog():
                      'kind': s.kind} for s in project.sources.values()],
         'dimensions': [{'id': d.dimension_id, 'label': d.label or d.dimension_id}
                        for d in project.dimensions.values()],
-        'policies': [{'id': p.ref, 'label': p.policy_id.replace('_', ' ').capitalize() + ' (v' + str(p.version) + ')'}
+        'policies': [{'id': p.ref, 'label': p.policy_id.replace('_', ' ').capitalize() + ' (v' + str(p.version) + ')',
+                      'findings': dict(p.findings), 'score_scale': list(p.score_scale)}
                      for p in project.policies.values()],
         'cohorts': [{'id': c.cohort_id, 'label': c.description or c.cohort_id}
                     for c in project.cohorts.values()],
@@ -59,7 +60,7 @@ def validate_card(widget):
         if source.kind != allowed[role] and not score:
             raise ValueError('The selected data source does not match its role.')
         score_prediction |= score
-    if score_prediction and query.get('threshold_policy') not in {p.ref for p in project.policies.values()}:
+    if (score_prediction or 'lunit_findings' in inputs.values()) and query.get('threshold_policy') not in {p.ref for p in project.policies.values()}:
         raise ValueError('Choose a threshold policy for score predictions.')
     if query.get('cohort') and query['cohort'] not in project.cohorts:
         raise ValueError('Choose a registered population.')
@@ -98,6 +99,7 @@ def validate_card(widget):
 
 def project_document(text):
     document = load_report_definition(text)
+    validate_display(document)
     if document['project'] != 'prime':
         raise ValueError('Choose a report from the current project.')
     section_ids = [s['id'] for s in document['sections']]

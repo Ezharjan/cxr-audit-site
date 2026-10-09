@@ -503,7 +503,7 @@ def _print_view_model(document: Mapping[str, Any]) -> dict[str, Any]:
                 "timezone": dates.get("timezone") or "",
                 "coverage": _display_dates(dates.get("coverage_note") or ""),
                 "measurement": versions.get("measurement_id") or "",
-                "policy": versions.get("policy_ref") or "—",
+                "policy": (versions.get("policy_ref") or "—") + ("; " + payload["caption"] if payload.get("lunit_thresholds") else ""),
                 "tables": [] if error else _widget_tables(payload),
             }
         )
