@@ -30,7 +30,7 @@ def error(code, status):
 
 
 def key_is_current(key):
-    return (key.revoked_at is None and key.expires_at > timezone.now()
+    return (key.revoked_at is None and (key.expires_at is None or key.expires_at > timezone.now())
             and key.owner.is_active and can_edit_catalog(key.owner))
 
 

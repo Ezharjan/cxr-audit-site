@@ -54,12 +54,16 @@ def configuration(request):
                     return redirect("agent_api:configuration")
                 label = request.POST.get("label", "").strip()
                 projects = sorted(set(request.POST.getlist("projects")))
-                try:
-                    expires = timezone.make_aware(datetime.combine(datetime.strptime(request.POST.get("expires", ""), "%Y-%m-%d").date(), time.max))
-                except ValueError:
-                    expires = None
-                if not label or len(label) > 100 or not projects or not set(projects) <= set(SUPPORTED_PROJECTS) or expires is None or expires <= timezone.now():
-                    message = "Enter a label, a supported project, and a future expiry date."
+                expiry_mode = request.POST.get("expiry_mode", "date")
+                expires = None
+                if expiry_mode == "date":
+                    try:
+                        expires = timezone.make_aware(datetime.combine(datetime.strptime(request.POST.get("expires", ""), "%Y-%m-%d").date(), time.max))
+                    except ValueError:
+                        pass
+                valid_expiry = expiry_mode == "never" or (expiry_mode == "date" and expires is not None and expires > timezone.now())
+                if not label or len(label) > 100 or not projects or not set(projects) <= set(SUPPORTED_PROJECTS) or not valid_expiry:
+                    message = "Enter a label, a supported project, and a future expiry date or select Never."
                 else:
                     try:
                         with transaction.atomic():

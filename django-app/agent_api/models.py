@@ -20,7 +20,7 @@ class APIKey(models.Model):
     public_id = models.CharField(max_length=32, unique=True)
     secret_digest = models.CharField(max_length=64)
     created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
+    expires_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
 

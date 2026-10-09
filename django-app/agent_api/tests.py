@@ -326,6 +326,26 @@ class APITests(TestCase):
         self.client.post("/settings/api/", {"action": "toggle", "enabled": "false", "confirmed": "yes"})
         self.assertEqual(self.client.get("/api/prime/reports", headers=self.headers).status_code, 503)
 
+    def test_never_expiry_creation_access_and_revocation(self):
+        self.client.force_login(self.owner)
+        page = self.client.get("/settings/api/")
+        created = self.client.post("/settings/api/", {"action": "create", "creation_token": page.context["creation_token"], "label": "Never expires", "projects": ["prime"], "expiry_mode": "never"})
+        self.assertEqual(created.status_code, 200)
+        key = APIKey.objects.get(label="Never expires")
+        self.assertIsNone(key.expires_at)
+        headers = {"X-API-Key": created.context["secret"]}
+        self.assertEqual(self.client.get("/api/prime/reports", headers=headers).status_code, 200)
+        self.client.post("/settings/api/", {"action": "revoke", "key_id": key.pk, "confirmed": "yes"})
+        self.assertEqual(self.client.get("/api/prime/reports", headers=headers).status_code, 401)
+
+    def test_expiry_mode_requires_explicit_never_or_valid_date(self):
+        self.client.force_login(self.owner)
+        for mode, expiry in (("date", ""), ("date", "2000-01-01"), ("unknown", "")):
+            page = self.client.get("/settings/api/")
+            result = self.client.post("/settings/api/", {"action": "create", "creation_token": page.context["creation_token"], "label": "Invalid expiry", "projects": ["prime"], "expiry_mode": mode, "expires": expiry})
+            self.assertEqual(result.status_code, 400)
+        self.assertFalse(APIKey.objects.filter(label="Invalid expiry").exists())
+
     def test_job_backend_missing_cannot_overwrite_concurrent_completion(self):
         task = ProcessingTask.objects.create(task_id=str(uuid.uuid4()), status="processing")
         job = APIJob.objects.create(task=task, owner=self.owner, creator_key=self.key, project_id="prime")

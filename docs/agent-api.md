@@ -4,7 +4,7 @@ The API is disabled by default. An active administrator manages global API acces
 
 ## Credentials and setup
 
-Create a named key, select `prime`, and choose an expiry (the form defaults to 90 days). Copy the secret from the creation response; it cannot be recovered. Refreshing/resubmitting the same creation form does not create another key or reveal the secret again. Rotate by creating a replacement, updating automation and revoking the old key. Other administrators cannot view/manage your keys. Revocation, expiry, owner deactivation or removal of admin authority stops access.
+Create a named key, select `prime`, and choose an expiry date (the form defaults to 90 days) or Never. Keys with Never expiry remain valid until revoked or their owner loses access. Copy the secret from the creation response; it cannot be recovered. Refreshing/resubmitting the same creation form does not create another key or reveal the secret again. Rotate by creating a replacement, updating automation and revoking the old key. Other administrators cannot view/manage your keys. Revocation, expiry, owner deactivation or removal of admin authority stops access.
 
 Send `X-API-Key` on **every request** over HTTPS. Browser sessions do not authenticate API requests. Never put the key in URLs, source control or application logs. Internal Django/FastAPI credentials remain separate.
 
