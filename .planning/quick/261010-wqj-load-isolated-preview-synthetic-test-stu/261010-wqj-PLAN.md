@@ -1,0 +1,1 @@
+Plan: Add a repeatable synthetic-only preview seeder to the server skill; target only fixed OS-temporary databases and report store; preserve existing rows/layouts. Reuse synthetic identifiers and packaged reports. Load 2000 studies, publish Overview/Showcase, and verify populated report responses.

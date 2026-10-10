@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-14)
 Phase: 6 of 6 (remaining hipaa controls plan)
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-10-10 - Completed quick task 261010-wms: Correct test server skill login verification route
+Last activity: 2026-10-10 - Completed quick task 261010-wqj: Load preview test data and Showcase
 
 Progress: [----------] 0%
 
@@ -78,6 +78,7 @@ None yet.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 261010-wqj | Load preview test data and Showcase; update server skill | 2026-10-10 | 30123f2 | [261010-wqj](./quick/261010-wqj-load-isolated-preview-synthetic-test-stu/) |
 | 261010-wms | Correct test server skill login verification route | 2026-10-10 | cbaedb9 | [261010-wms](./quick/261010-wms-correct-test-server-skill-login-verifica/) |
 | 261010-w7f | Document port 8766 test server project skill | 2026-10-10 | ca638dd | [261010-w7f](./quick/261010-w7f-document-port-8766-synthetic-preview-sta/) |
 | 261010-0ju | Configurable Lunit thresholds per report table and graph | 2026-10-10 | 3dc74a5 | [261010-0ju](./quick/261010-0ju-add-per-card-configurable-lunit-finding-/) |
