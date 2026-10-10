@@ -21,7 +21,6 @@ from requests.exceptions import ConnectionError, Timeout
 
 from django.shortcuts import render
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.conf import settings
 from django.utils import timezone
@@ -104,6 +103,8 @@ def _background_poll_and_save(task_id, api_url):
         except Exception:
             pass
     finally:
+        from .ingestion import cleanup
+        cleanup()
         with _active_worker_lock:
             if _active_worker_task_id == task_id:
                 _active_worker_task_id = None
@@ -353,7 +354,6 @@ def tasks_list(request):
 
 @login_required
 @admin_required
-@csrf_exempt
 @require_http_methods(["POST"])
 def backfill_supplemental(request):
     """
@@ -429,10 +429,11 @@ def backfill_supplemental(request):
 
 @login_required
 @admin_required
-@csrf_exempt
 @require_http_methods(["POST"])
 def delete_task(request, task_id):
     """Delete a processing task by ID."""
+    if not _can_access_task(request.user, task_id):
+        return JsonResponse({'error': 'Task not found'}, status=404)
     try:
         task = ProcessingTask.objects.get(task_id=task_id)
     except ProcessingTask.DoesNotExist:
@@ -451,11 +452,12 @@ def delete_task(request, task_id):
 
 
 @login_required
-@csrf_exempt
 @require_http_methods(["POST"])
 def cancel_task(request, task_id):
     """Cancel a running task by marking it as cancelled in the DB.
     The background worker will stop polling on its next cycle."""
+    if not _can_access_task(request.user, task_id):
+        return JsonResponse({'error': 'Task not found'}, status=404)
     try:
         task = ProcessingTask.objects.get(task_id=task_id)
     except ProcessingTask.DoesNotExist:
@@ -468,45 +470,9 @@ def cancel_task(request, task_id):
     task.completed_at = timezone.now()
     task.error_message = 'Cancelled by user'
     task.save()
+    from .ingestion import cleanup
+    cleanup()
     return JsonResponse({'ok': True})
-
-
-@login_required
-@csrf_exempt
-@require_http_methods(["POST"])
-def analyze_auto_sort(request):
-    """Submit auto-sorted files through the shared processing reservation."""
-    from .submission import submit_files, SubmissionError
-    files = request.FILES.getlist('files')
-    if not files:
-        return JsonResponse({'error': 'No files uploaded'}, status=400)
-    forwarded = [('files', (f.name, f, f.content_type or 'application/octet-stream')) for f in files]
-    try:
-        return JsonResponse(submit_files(forwarded, request.POST.get('supplemental_steps', 'false').lower() == 'true'))
-    except SubmissionError as exc:
-        return JsonResponse({'error': exc.code}, status=exc.status)
-    except Exception:
-        return JsonResponse({'error': 'Processing service unavailable'}, status=503)
-
-
-@login_required
-@csrf_exempt
-@require_http_methods(["POST"])
-def analyze_multiple(request):
-    """Submit explicitly grouped files through the same reservation as auto-sort."""
-    from .submission import submit_files, SubmissionError
-    carpl_files = request.FILES.getlist('lunit_files')
-    ge_files = request.FILES.getlist('ground_truth_files')
-    if not carpl_files or not ge_files:
-        return JsonResponse({'error': 'Both CARPL and GE/RIS files are required'}, status=400)
-    forwarded = [(name, (f.name, f, f.content_type or 'application/octet-stream'))
-                 for name, files in [('lunit_files', carpl_files), ('ground_truth_files', ge_files)] for f in files]
-    try:
-        return JsonResponse(submit_files(forwarded, request.POST.get('supplemental_steps', 'false').lower() == 'true', endpoint='analyze-multiple'))
-    except SubmissionError as exc:
-        return JsonResponse({'error': exc.code}, status=exc.status)
-    except Exception:
-        return JsonResponse({'error': 'Processing service unavailable'}, status=503)
 
 
 @login_required
@@ -515,6 +481,12 @@ def get_status(request, task_id):
     """
     Proxy status request to the API server.
     """
+    if not _can_access_task(request.user, task_id):
+        return JsonResponse({'error': 'Task not found'}, status=404)
+    saved = ProcessingTask.objects.get(pk=task_id)
+    if saved.status in ('completed', 'failed', 'cancelled'):
+        return JsonResponse({'task_id': task_id, 'status': saved.status, 'progress_percent': saved.progress_percent,
+            'progress': saved.progress_message or '', 'error': 'Processing failed' if saved.status == 'failed' else None})
     api_url = get_api_url()
     
     try:
@@ -536,8 +508,7 @@ def get_status(request, task_id):
     except Timeout:
         return JsonResponse({'error': 'API server request timed out'}, status=504)
     except Exception as e:
-        traceback.print_exc()
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({'error': 'Processing service request failed'}, status=500)
 
 
 @login_required
@@ -546,6 +517,10 @@ def get_results(request, task_id):
     """
     Proxy results request to the API server and save to database.
     """
+    if not _can_access_task(request.user, task_id):
+        return JsonResponse({'error': 'Task not found'}, status=404)
+    if ProcessingTask.objects.filter(pk=task_id, status='completed', results_saved_at__isnull=False).exists():
+        return get_task_results(request, task_id)
     api_url = get_api_url()
     
     try:
@@ -571,8 +546,7 @@ def get_results(request, task_id):
     except Timeout:
         return JsonResponse({'error': 'API server request timed out'}, status=504)
     except Exception as e:
-        traceback.print_exc()
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({'error': 'Processing service request failed'}, status=500)
 
 
 @login_required
@@ -651,7 +625,7 @@ def get_active_task(request):
     Used on page load to resume monitoring UI.
     """
     active = _get_active_task()
-    if not active:
+    if not active or not _can_access_task(request.user, active.task_id):
         return JsonResponse({'active': False})
 
     return JsonResponse({
@@ -674,6 +648,8 @@ def get_task_results(request, task_id):
     Used when the user returns to the page after the background worker
     has already fetched and saved results.
     """
+    if not _can_access_task(request.user, task_id):
+        return JsonResponse({'error': 'Task not found'}, status=404)
     try:
         task = ProcessingTask.objects.get(task_id=task_id)
     except ProcessingTask.DoesNotExist:
@@ -690,100 +666,6 @@ def get_task_results(request, task_id):
         'csv_data': task.csv_data or '',
         'txt_report': task.txt_report or '',
     })
-
-
-@login_required
-@csrf_exempt
-@require_http_methods(["POST"])
-def precheck_files(request):
-    """
-    Reads ACCESSION_NO from each CSV/Excel (including password-protected),
-    checks which already exist in the DB.
-    Returns counts and lists so the user can decide whether to proceed.
-    """
-    import pandas as pd
-    from io import BytesIO
-
-    XLSX_PASSWORD = os.environ.get("XLSX_DECRYPT_PASSWORD", "")
-
-    def _read_file_to_df(raw_bytes, filename):
-        """Read CSV or Excel (with optional decryption) into a DataFrame."""
-        name_lower = filename.lower()
-        if name_lower.endswith('.csv'):
-            return pd.read_csv(BytesIO(raw_bytes))
-        elif name_lower.endswith(('.xlsx', '.xls')):
-            # Try plain read first, then try decrypting
-            try:
-                return pd.read_excel(BytesIO(raw_bytes))
-            except Exception:
-                pass
-            # Try password-protected
-            try:
-                from msoffcrypto import OfficeFile
-                decrypted = BytesIO()
-                office_file = OfficeFile(BytesIO(raw_bytes))
-                office_file.load_key(password=XLSX_PASSWORD)
-                office_file.decrypt(decrypted)
-                decrypted.seek(0)
-                return pd.read_excel(decrypted)
-            except Exception as decrypt_err:
-                raise ValueError(f'Cannot read Excel file (tried plain + password): {decrypt_err}')
-        else:
-            raise ValueError('unsupported file type')
-
-    try:
-        files = request.FILES.getlist('files')
-        if not files:
-            return JsonResponse({'error': 'No files provided'}, status=400)
-
-        all_accessions = set()
-        file_details = []
-        parse_errors = []
-
-        for f in files:
-            try:
-                raw = f.read()
-                df = _read_file_to_df(raw, f.name)
-
-                if 'ACCESSION_NO' not in df.columns:
-                    # Not a CARPL file (probably a RIS/GE file) — skip silently
-                    file_details.append({'name': f.name, 'rows': len(df), 'accessions': 0, 'type': 'ris'})
-                    continue
-
-                accessions = df['ACCESSION_NO'].dropna().astype('Int64').dropna().unique()
-                acc_set = set(int(a) for a in accessions)
-                all_accessions |= acc_set
-                file_details.append({'name': f.name, 'rows': len(df), 'accessions': len(acc_set), 'type': 'carpl'})
-            except Exception as e:
-                parse_errors.append(f'{f.name}: {str(e)}')
-
-        if not all_accessions:
-            return JsonResponse({
-                'total': 0, 'new': 0, 'existing': 0,
-                'files': file_details, 'errors': parse_errors,
-            })
-
-        # Query DB for existing accession numbers in bulk
-        existing_set = set(
-            CXRStudy.objects.filter(
-                accession_no__in=list(all_accessions)
-            ).values_list('accession_no', flat=True)
-        )
-
-        new_accessions = all_accessions - existing_set
-
-        return JsonResponse({
-            'total': len(all_accessions),
-            'new': len(new_accessions),
-            'existing': len(existing_set),
-            'existing_accessions': sorted(existing_set),
-            'files': file_details,
-            'errors': parse_errors,
-        })
-
-    except Exception as e:
-        traceback.print_exc()
-        return JsonResponse({'error': str(e)}, status=500)
 
 
 # ============ Database Helper Functions ============
@@ -809,7 +691,7 @@ def save_results_to_database(api_result, batch_id, *, strict=False):
         return new_count, skipped_count
     
     try:
-        df = pd.read_csv(StringIO(csv_data))
+        df = pd.read_csv(StringIO(csv_data), dtype={'ACCESSION_NO': 'string'})
     except Exception as e:
         if strict:
             raise
@@ -928,7 +810,8 @@ def save_results_to_database(api_result, batch_id, *, strict=False):
             continue
         
         try:
-            accession_no = int(accession_no)
+            from .validation import identifier
+            accession_no = identifier(accession_no)
         except (ValueError, TypeError):
             if strict:
                 raise ValueError('Invalid accession in result CSV') from None
@@ -983,375 +866,12 @@ def save_results_to_database(api_result, batch_id, *, strict=False):
     return new_count, skipped_count
 
 
-# ============ CSV Import (Historical Data) ============
-
-# Shared column mapping definition for import preview & confirm.
-# Maps CSV column names → CXRStudy model field names.
-
-_IMPORT_COLUMN_MAP = {
-    # ── Identifiers ──
-    'ACCESSION_NO': 'accession_no',
-    'StudyIDAnonymized': 'study_id_anonymized',
-    'StudyID': 'study_id',
-    'Patient Name': 'patient_name',
-    'Patient ID': 'patient_id',
-    'PATIENT_AGE': 'patient_age',
-    'PATIENT_GENDER': 'patient_gender',
-    'Instances': 'instances',
-    'Study Description': 'study_description',
-    'WORKPLACE': 'workplace',
-    'MEDICAL_LOCATION_NAME': 'medical_location_name',
-    'Institute': 'medical_location_name',
-    # ── Lunit scores ──
-    'Abnormal': 'abnormal',
-    'Atelectasis': 'atelectasis',
-    'Calcification': 'calcification',
-    'Cardiomegaly': 'cardiomegaly',
-    'Consolidation': 'consolidation',
-    'Fibrosis': 'fibrosis',
-    'Mediastinal Widening': 'mediastinal_widening',
-    'Nodule': 'nodule',
-    'Pleural Effusion': 'pleural_effusion',
-    'Pneumoperitoneum': 'pneumoperitoneum',
-    'Pneumothorax': 'pneumothorax',
-    'Tuberculosis': 'tuberculosis',
-    # ── AI workflow ──
-    'AI Report': 'ai_report',
-    'AI_PRIORITY': 'ai_priority',
-    'Feedback': 'feedback',
-    'Comments': 'comments',
-    'Status': 'status',
-    # ── Reports / grading ──
-    'TEXT_REPORT': 'text_report',
-    'gt_manual': 'gt_manual',
-    'manual_gt': 'gt_manual',
-    'gt_llm': 'gt_llm',
-    'lunit_binarised': 'lunit_binarised',
-    'llm_grade': 'llm_grade',
-    # ── LLM finding columns ──
-    'atelectasis_llm': 'atelectasis_llm',
-    'calcification_llm': 'calcification_llm',
-    'cardiomegaly_llm': 'cardiomegaly_llm',
-    'consolidation_llm': 'consolidation_llm',
-    'fibrosis_llm': 'fibrosis_llm',
-    'mediastinal_widening_llm': 'mediastinal_widening_llm',
-    'nodule_llm': 'nodule_llm',
-    'pleural_effusion_llm': 'pleural_effusion_llm',
-    'pneumoperitoneum_llm': 'pneumoperitoneum_llm',
-    'pneumothorax_llm': 'pneumothorax_llm',
-    'tb': 'tb_llm',
-    'tb_llm': 'tb_llm',
-}
-
-_IMPORT_DATETIME_COLS = {
-    'Upload Date': 'upload_date',
-    'Inference Date': 'inference_date',
-    'AI_FLAG_RECEIVED_DATE': 'ai_flag_received_date',
-    'PROCEDURE_START_DATE': 'procedure_start_date',
-    'PROCEDURE_END_DATE': 'procedure_end_date',
-}
-
-_IMPORT_TIMEDELTA_COLS = {
-    'Time_End_to_End': 'time_end_to_end_seconds',
-    'Time to clinical_decision(mins)': 'time_to_clinical_decision_seconds',
-}
-
-# Columns to ignore silently (index / junk columns)
-_IMPORT_IGNORE_COLS = {'Unnamed: 0', '', 'Unnamed: 0.1'}
 
 
-def _parse_bool_to_int(value):
-    """Convert 'True'/'False'/bool to 1/0 for SmallIntegerField. Returns None for NaN."""
-    import pandas as pd
-    if pd.isna(value) or value is None:
-        return None
-    if isinstance(value, bool):
-        return 1 if value else 0
-    s = str(value).strip().lower()
-    if s in ('true', '1', '1.0'):
-        return 1
-    if s in ('false', '0', '0.0'):
-        return 0
-    if s == '':
-        return None
-    try:
-        return int(float(s))
-    except (ValueError, TypeError):
-        return None
-
-
-def _sanitise_row(row, csv_columns):
-    """
-    Build a dict of model field values from a CSV row.
-    Returns (model_data_dict, error_string_or_None).
-    """
-    import pandas as pd
-    from django.utils.timezone import make_aware, is_naive, get_current_timezone
-
-    accession_raw = row.get('ACCESSION_NO')
-    if pd.isna(accession_raw) or accession_raw is None:
-        return None, 'missing ACCESSION_NO'
-    try:
-        accession_no = int(float(accession_raw))
-    except (ValueError, TypeError):
-        return None, f'invalid ACCESSION_NO: {accession_raw!r}'
-
-    data = {'accession_no': accession_no}
-
-    # SmallInteger fields that may contain bool-like strings
-    _smallint_fields = {
-        'gt_manual', 'gt_llm', 'lunit_binarised', 'llm_grade',
-        'atelectasis_llm', 'calcification_llm', 'cardiomegaly_llm',
-        'consolidation_llm', 'fibrosis_llm', 'mediastinal_widening_llm',
-        'nodule_llm', 'pleural_effusion_llm', 'pneumoperitoneum_llm',
-        'pneumothorax_llm', 'tb_llm',
-    }
-
-    # 1. Plain / SmallInt columns
-    for csv_col in csv_columns:
-        model_field = _IMPORT_COLUMN_MAP.get(csv_col)
-        if not model_field or model_field == 'accession_no':
-            continue
-        value = row.get(csv_col)
-        if pd.isna(value) or value is None:
-            value = None
-        elif model_field in _smallint_fields:
-            value = _parse_bool_to_int(value)
-        data[model_field] = value
-
-    # 2. Datetime columns
-    for csv_col, model_field in _IMPORT_DATETIME_COLS.items():
-        if csv_col in csv_columns:
-            val = row.get(csv_col)
-            if pd.isna(val) or val is None:
-                data[model_field] = None
-            else:
-                try:
-                    dt = pd.to_datetime(val).to_pydatetime()
-                    if is_naive(dt):
-                        dt = make_aware(dt, get_current_timezone())
-                    data[model_field] = dt
-                except Exception:
-                    data[model_field] = None
-
-    # 3. Timedelta columns → total seconds
-    for csv_col, model_field in _IMPORT_TIMEDELTA_COLS.items():
-        if csv_col in csv_columns:
-            val = row.get(csv_col)
-            if pd.isna(val) or val is None:
-                data[model_field] = None
-            else:
-                try:
-                    td = pd.to_timedelta(val)
-                    data[model_field] = td.total_seconds()
-                except Exception:
-                    try:
-                        data[model_field] = float(val)
-                    except (ValueError, TypeError):
-                        data[model_field] = None
-
-    # 4. Fallback: REPORT_TURN_AROUND_TIME → clinical decision time
-    if data.get('time_to_clinical_decision_seconds') is None and 'REPORT_TURN_AROUND_TIME' in csv_columns:
-        tat = row.get('REPORT_TURN_AROUND_TIME')
-        if not pd.isna(tat) and tat is not None:
-            try:
-                data['time_to_clinical_decision_seconds'] = float(tat) * 60.0
-            except (ValueError, TypeError):
-                pass
-
-    return data, None
-
-
-@login_required
-@admin_required
-def import_data(request):
-    """Render the import historical data page."""
-    return render(request, 'upload/import_data.html')
-
-
-@login_required
-@admin_required
-@csrf_exempt
-@require_http_methods(["POST"])
-def import_preview(request):
-    """
-    Accept a CSV upload, parse it, and return a preview with:
-    - total rows, new vs duplicate counts, invalid row count
-    - column mapping (CSV col → DB field or 'ignored')
-    - warnings (e.g. missing expected columns)
-    """
-    import pandas as pd
-
-    uploaded = request.FILES.get('file')
-    if not uploaded:
-        return JsonResponse({'error': 'No file uploaded'}, status=400)
-
-    mode = request.POST.get('mode', 'skip')  # 'skip' or 'update'
-
-    try:
-        df = pd.read_csv(uploaded)
-    except Exception as e:
-        return JsonResponse({'error': f'Could not parse CSV: {e}'}, status=400)
-
-    csv_columns = list(df.columns)
-
-    # ── Validate: must have ACCESSION_NO ──
-    if 'ACCESSION_NO' not in csv_columns:
-        return JsonResponse({'error': 'CSV must contain an ACCESSION_NO column'}, status=400)
-
-    # ── Build column mapping for display ──
-    all_mapped = _IMPORT_COLUMN_MAP.copy()
-    all_mapped.update(_IMPORT_DATETIME_COLS)
-    all_mapped.update(_IMPORT_TIMEDELTA_COLS)
-    # REPORT_TURN_AROUND_TIME is a special fallback
-    all_mapped['REPORT_TURN_AROUND_TIME'] = 'time_to_clinical_decision_seconds (fallback)'
-
-    column_mapping = []
-    for col in csv_columns:
-        if col in _IMPORT_IGNORE_COLS:
-            continue
-        db_field = all_mapped.get(col)
-        column_mapping.append([col, db_field])  # None if unmapped
-
-    # ── Warnings ──
-    warnings = []
-    unmapped = [col for col, db in column_mapping if db is None]
-    if unmapped:
-        warnings.append(f'{len(unmapped)} column(s) not mapped and will be ignored: {", ".join(unmapped[:5])}{"…" if len(unmapped) > 5 else ""}')
-
-    # Check for expected columns that are missing
-    expected = {'ACCESSION_NO', 'WORKPLACE', 'TEXT_REPORT', 'gt_llm', 'lunit_binarised'}
-    missing_expected = expected - set(csv_columns)
-    if missing_expected:
-        warnings.append(f'Expected column(s) missing: {", ".join(sorted(missing_expected))}')
-
-    # ── Count duplicates, valid, invalid ──
-    total_rows = len(df)
-    invalid_count = 0
-    valid_accessions = []
-
-    for _, row in df.iterrows():
-        acc = row.get('ACCESSION_NO')
-        if pd.isna(acc):
-            invalid_count += 1
-            continue
-        try:
-            valid_accessions.append(int(float(acc)))
-        except (ValueError, TypeError):
-            invalid_count += 1
-
-    # De-duplicate within the CSV itself
-    unique_accessions = list(dict.fromkeys(valid_accessions))  # preserves order
-    csv_internal_dupes = len(valid_accessions) - len(unique_accessions)
-    if csv_internal_dupes > 0:
-        warnings.append(f'{csv_internal_dupes} duplicate accession number(s) within the CSV (only first occurrence will be used)')
-        invalid_count += csv_internal_dupes
-
-    # Check against DB
-    existing_in_db = set(
-        CXRStudy.objects.filter(
-            accession_no__in=unique_accessions
-        ).values_list('accession_no', flat=True)
-    )
-
-    duplicate_count = len(existing_in_db)
-    new_count = len(unique_accessions) - duplicate_count
-
-    return JsonResponse({
-        'total_rows': total_rows,
-        'new_count': new_count,
-        'duplicate_count': duplicate_count,
-        'invalid_count': invalid_count,
-        'column_mapping': column_mapping,
-        'warnings': warnings,
-        'mode': mode,
-    })
-
-
-@login_required
-@admin_required
-@csrf_exempt
-@require_http_methods(["POST"])
-def import_confirm(request):
-    """
-    Actually import the CSV into the database.
-    Supports two modes:
-      - 'skip': only insert rows whose accession_no doesn't exist (default)
-      - 'update': insert new rows AND update existing rows
-    """
-    import pandas as pd
-    import uuid
-
-    uploaded = request.FILES.get('file')
-    if not uploaded:
-        return JsonResponse({'error': 'No file uploaded'}, status=400)
-
-    mode = request.POST.get('mode', 'skip')
-
-    try:
-        df = pd.read_csv(uploaded)
-    except Exception as e:
-        return JsonResponse({'error': f'Could not parse CSV: {e}'}, status=400)
-
-    if 'ACCESSION_NO' not in df.columns:
-        return JsonResponse({'error': 'CSV must contain an ACCESSION_NO column'}, status=400)
-
-    csv_columns = list(df.columns)
-    batch_id = str(uuid.uuid4())
-
-    new_count = 0
-    updated_count = 0
-    skipped_count = 0
-    invalid_count = 0
-    seen_accessions = set()  # track intra-CSV duplicates
-
-    for _, row in df.iterrows():
-        model_data, error = _sanitise_row(row, csv_columns)
-        if error:
-            invalid_count += 1
-            continue
-
-        accession_no = model_data['accession_no']
-
-        # Skip intra-CSV duplicates (keep first occurrence)
-        if accession_no in seen_accessions:
-            invalid_count += 1
-            continue
-        seen_accessions.add(accession_no)
-
-        model_data['processing_batch_id'] = batch_id
-
-        existing = CXRStudy.get_or_none(accession_no)
-
-        if existing:
-            if mode == 'update':
-                # Update existing record — only set non-None values
-                for field, value in model_data.items():
-                    if field == 'accession_no':
-                        continue
-                    if value is not None:
-                        setattr(existing, field, value)
-                try:
-                    existing.save()
-                    updated_count += 1
-                except Exception as e:
-                    print(f"Error updating accession {accession_no}: {e}")
-                    traceback.print_exc()
-            else:
-                skipped_count += 1
-        else:
-            try:
-                CXRStudy.objects.create(**model_data)
-                new_count += 1
-            except Exception as e:
-                print(f"Error creating accession {accession_no}: {e}")
-                traceback.print_exc()
-                invalid_count += 1
-
-    return JsonResponse({
-        'new_count': new_count,
-        'updated_count': updated_count,
-        'skipped_count': skipped_count,
-        'invalid_count': invalid_count,
-        'batch_id': batch_id,
-    })
+def _can_access_task(user, task_id):
+    if not ProcessingTask.objects.filter(pk=task_id).exists():
+        return False
+    if _is_admin(user):
+        return True
+    from .models import UploadPreview
+    return UploadPreview.objects.filter(task_id=task_id, owner=user).exists()

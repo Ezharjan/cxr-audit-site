@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Goh Shu Wen
 # Licensed under AGPL-3.0-or-later. See LICENSE at the repository root.
 from string import Template
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StrictBool
 
 sys_role_msg = '''You are a helpful medical assistant.
 Your task is to classify chest X-ray reports according to the following grading system:
@@ -213,7 +213,7 @@ ${rpt}
 ''')
 
 class cxrGrade(BaseModel):
-    grade: int
+    grade: int = Field(ge=1, le=6, strict=True)
     
 
 # SUPPLEMENT: LUNIT FINDINGS INCL TB
@@ -371,17 +371,17 @@ ${rpt}
 ''')
 
 class LunitFindings(BaseModel):
-    atelectasis_llm: bool
-    calcification_llm: bool
-    cardiomegaly_llm: bool
-    consolidation_llm: bool
-    fibrosis_llm: bool
-    mediastinal_widening_llm: bool
-    nodule_llm: bool
-    pleural_effusion_llm: bool
-    pneumoperitoneum_llm: bool
-    pneumothorax_llm: bool
-    tb: bool
+    atelectasis_llm: StrictBool
+    calcification_llm: StrictBool
+    cardiomegaly_llm: StrictBool
+    consolidation_llm: StrictBool
+    fibrosis_llm: StrictBool
+    mediastinal_widening_llm: StrictBool
+    nodule_llm: StrictBool
+    pleural_effusion_llm: StrictBool
+    pneumoperitoneum_llm: StrictBool
+    pneumothorax_llm: StrictBool
+    tb: StrictBool
 
 ################################
 ### METHOD 3: HYBRID GRADING ###

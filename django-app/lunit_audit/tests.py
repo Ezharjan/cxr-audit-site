@@ -208,12 +208,11 @@ class VisualPageRenderTests(TestCase):
             self.admin,
         )
 
-    def test_import_page_keeps_interaction_targets(self):
-        self.assert_page_contains(
-            "/upload/import/",
-            ("Import Historical Data", 'id="uploadZone"', 'id="previewCard"'),
-            self.admin,
-        )
+    def test_retired_import_page_explains_source_upload_migration(self):
+        self.client.force_login(self.admin)
+        response = self.client.get('/upload/import/')
+        self.assertEqual(response.status_code, 410)
+        self.assertIn('Use Upload with source column mappings', response.json()['error'])
 
     def test_viewer_page_keeps_interaction_targets(self):
         self.assert_page_contains(

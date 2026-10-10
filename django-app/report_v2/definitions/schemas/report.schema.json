@@ -154,6 +154,87 @@
                           }
                         }
                       }
+                    },
+                    "field_semantics": {
+                      "type": "object",
+                      "maxProperties": 80,
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "maxLength": 128
+                          },
+                          "interpretation": {
+                            "enum": [
+                              "identifier",
+                              "integer",
+                              "measurement",
+                              "age",
+                              "binary",
+                              "nominal",
+                              "ordered",
+                              "date_time",
+                              "duration",
+                              "free_text"
+                            ]
+                          },
+                          "unit": {
+                            "type": "string",
+                            "maxLength": 128
+                          },
+                          "aliases": {
+                            "type": "array",
+                            "maxItems": 128,
+                            "items": {
+                              "type": "string",
+                              "maxLength": 128
+                            }
+                          },
+                          "categories": {
+                            "type": "array",
+                            "maxItems": 128,
+                            "items": {
+                              "type": "string",
+                              "maxLength": 128
+                            }
+                          },
+                          "closed": {
+                            "type": "boolean"
+                          },
+                          "bins": {
+                            "type": "array",
+                            "maxItems": 32,
+                            "items": {
+                              "type": "array",
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          },
+                          "positive_class": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "label",
+                          "interpretation",
+                          "unit",
+                          "aliases",
+                          "categories",
+                          "closed",
+                          "bins",
+                          "positive_class",
+                          "revision"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [

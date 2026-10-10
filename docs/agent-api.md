@@ -14,7 +14,7 @@ Global disablement stops new API calls without a restart. Existing processing co
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/prime/jobs` | Auto-sort files, submit processing, return public job ID |
+| POST | `/api/prime/jobs` | Validate explicit mappings, submit complete new studies or finish enrichment/no-op |
 | GET | `/api/prime/jobs/{job_id}` | Status of a job owned by the key's user |
 | GET | `/api/prime/reports` | Published report slugs, titles, versions and URLs |
 | GET | `/api/prime/reports/{report_slug}/pdf` | Real PDF using current published defaults |
@@ -22,7 +22,19 @@ Global disablement stops new API calls without a restart. Existing processing co
 
 Do not append trailing slashes. GET requests have no body or query parameters. Report APIs reject filters and overrides. User/browser report preferences never affect these exports. A published report may include study-level content if configured to export it.
 
-Upload is multipart: repeated `files` fields and optional `supplemental_steps` (`true` or `false`, default `false`). Limits: 1–20 nonempty CSV/XLS/XLSX files, at most 49 MiB combined; Nginx caps the whole multipart request at 50 MiB. The existing internal pipeline validates file contents and source mappings. Busy processing returns 409; manual uploads and backfills use the same database reservation.
+Upload is multipart: repeated `files` fields, required `upload_manifest` JSON, and optional `supplemental_steps` (`true` or `false`, default `false`). The manifest is an ordered array: entry 0 describes multipart file 0, regardless of filename. Each entry contains **exactly one** of `format_id` or `column_mapping`. Duplicate JSON keys, duplicate metadata fields, unknown destinations and duplicate destination allocations reject the whole request. The API never infers aliases or autodetects a format.
+
+Format IDs refer to enabled PRIME formats saved under **Admin → Upload settings**. Header sets must match exactly after surrounding whitespace is trimmed; order does not matter, case does. Explicit mapping objects map source headers to permitted stable field IDs; absent or empty destinations exclude columns. Mixed modes across files are supported:
+
+```json
+[{"format_id":"my-carpl"},{"column_mapping":{"anon_id":"accession_no","RIS_REPORT":"text_report","SITE":"workplace"}}]
+```
+
+Files combine by exact `anon_id`/`accession_no` before completeness checks. New studies require identifier, report text, workplace and the ten primary finding scores. Missing required inputs exclude/discard new studies; malformed supplied values, missing/invalid identifiers and conflicting uploaded values reject everything before dispatch. Raw Tuberculosis is optional; enabled supplemental extraction includes TB. Exact integer identifiers only: unsupported alphanumeric IDs, leading-zero tokens, fractional or overflow IDs and precision-lost spreadsheet numeric IDs reject. Format rules can declare date formats/timezones, value dictionaries, missing sentinels and score scale; no executable transformations.
+
+Existing studies can fill approved independent missing annotations only. Populated values, zero and false remain unchanged; processing-dependent inputs and generated fields cannot be enriched through upload. Existing studies never automatically rerun LLM grading. Uploaded LLM/manual-GT outputs are forbidden destinations. Manual GT retains its dedicated workflow; historical import now returns 410 with migration guidance.
+
+Limits: 1–20 nonempty UTF-8 CSV/XLS/XLSX files, 49 MiB combined, 50,000 total rows, 128 columns, 65,536 characters per cell, one worksheet, 128 MiB expanded/decrypted workbook size. Formulas/macros/external workbook links are unsupported. Parsing is bounded to 25 seconds per file and 60 seconds per submission, 20 CPU seconds and 768 MiB per worker. Nginx caps multipart requests at 50 MiB. Busy parsing/processing returns 409 and shares the manual/backfill reservation. See [upload rollout and platform gates](upload-configuration.md) before enabling this release.
 
 Email JSON contains **only** `recipients`: 1–20 valid addresses. Addresses are sent as BCC, with `DEFAULT_FROM_EMAIL` as sender/to. The endpoint sends synchronously with a 20-second SMTP timeout. `accepted_by_mail_server` means accepted by the configured mail backend, not confirmed delivery. The HTTP caller must have a timeout sufficient for PDF rendering plus SMTP.
 
@@ -30,7 +42,7 @@ Each PDF pins the published definition and freezes its configured defaults and r
 
 ## Synthetic examples
 
-The examples use placeholder credentials and synthetic filenames. Replace the base URL and load the key from your secret store. Do not disable TLS verification in production.
+The examples use placeholder credentials and synthetic filenames. Save `my-carpl` and `my-ris` with the exact synthetic header sets before using the named-format upload example. Replace the base URL and load the key from your secret store. Do not disable TLS verification in production.
 
 ```sh
 # Set PRIMER_API_KEY in the calling environment without printing it.
@@ -38,6 +50,7 @@ curl --fail-with-body 'https://primer.example/api/prime/jobs' \
   -H "X-API-Key: $PRIMER_API_KEY" \
   -H 'Idempotency-Key: routine-upload-2026-10-09' \
   -F 'files=@synthetic-carpl.csv' -F 'files=@synthetic-ris.xlsx' \
+  -F 'upload_manifest=[{"format_id":"my-carpl"},{"format_id":"my-ris"}]' \
   -F 'supplemental_steps=false'
 
 curl --fail-with-body 'https://primer.example/api/prime/jobs/JOB_UUID' \
@@ -56,7 +69,7 @@ curl --fail-with-body 'https://primer.example/api/prime/reports/REPORT_SLUG/emai
   --data '{"recipients":["auditor@example.invalid"]}'
 ```
 
-Upload returns 202 and `{job_id,status,status_url}`. Poll `status_url`; states are `queued`, `processing`, `saving`, `completed`, `failed`. **Completed means the results were saved into Django.** Job IDs are opaque UUIDs; legacy backend IDs are not accepted. Replacement keys owned by the same user can access that user's jobs within the project. Another user's jobs return 404. Report access is project-wide.
+Upload with new complete studies returns 202 and `{job_id,status,status_url,counts}`. Enrichment-only, all-incomplete or unchanged submissions return 200 with `{status:"completed",counts}` and no job ID or LLM call. Invalid values return 400 with bounded errors/counts. Counts refer to distinct combined studies, including `total`, `new_complete`, `new_incomplete`, `existing_enrichable`, `existing_unchanged` and separate `invalid_raw_rows`. Poll `status_url`; states are `queued`, `processing`, `saving`, `completed`, `failed`. **Completed means the results were saved into Django.** Job IDs are opaque UUIDs; legacy backend IDs are not accepted. Replacement keys owned by the same user can access that user's jobs within the project. Another user's jobs return 404. Report access is project-wide.
 
 ## Retries, errors and capacity
 
@@ -116,3 +129,8 @@ python manage.py reset_submission_reservation --confirmed-backend-idle
 ```
 
 This does not resend the upload or clear unknown retry outcomes. Keep unknown idempotency records for reconciliation. Disablement/revocation cannot undo effects already dispatched. Do not activate a second project until ingestion/storage partitioning and authorization tests exist.
+
+
+### Upload client migration
+
+Older clients without `upload_manifest` receive `upload_manifest_required` (400); there is no implicit legacy fallback. Add the ordered per-file manifest, handle both 202 jobs and terminal 200 counts, and show incomplete discard counts. Request digests cover project, file order/name/bytes, mapping modes and supplemental steps. First acceptance privately pins effective format/field revisions; accepted same-key retries replay the original response even after defaults change. They never reinterpret existing requests under new settings.

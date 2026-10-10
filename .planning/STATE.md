@@ -216,3 +216,7 @@ Implemented quick-task handoff 261009-g23 in commit `a688ca1`: five authenticate
 ### Upload handling implementation handoff (2026-10-09)
 
 Quick task 261009-vmg complete (documentation only). Sol implementation pending: [implementation plan](./quick/261009-vmg-write-sol-implementation-plan-for-config/IMPLEMENTATION-PLAN.md). Covers project-scoped formats, field semantics/report integration, protected results schema, incomplete exclusions versus invalid rejection, shared UI/API validation and security gates. No upload behaviour changed.
+
+### Upload handling execution (2026-10-11)
+
+Quick task 261011-1cj implemented the 261009-vmg handoff: supporting field/format/preview tables, shared strict UI/API ingestion, canonical processing and atomic persistence, protected generated outputs, report semantic snapshots and administration/rollout documentation. See [implementation summary](./quick/261009-vmg-write-sol-implementation-plan-for-config/IMPLEMENTATION-SUMMARY.md). Local synthetic verification completed; PostgreSQL/container/real inference deployment gates remain. Not deployed.

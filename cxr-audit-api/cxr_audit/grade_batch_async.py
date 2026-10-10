@@ -128,7 +128,7 @@ class BatchCXRProcessor:
             result = classifier.gradeReportSemialgo(report_text)
             return index, result
         except Exception as e:
-            print(f"Error processing report {index} (semialgo): {e}")
+            print("Report processing failed")
             return index, {}
     
     def _process_single_report_llm(self, report_text: str, index: int) -> Tuple[int, Dict]:
@@ -139,7 +139,7 @@ class BatchCXRProcessor:
             result = classifier.gradeReportLLM(report_text)
             return index, result
         except Exception as e:
-            print(f"Error processing report {index} (LLM): {e}")
+            print("Report processing failed")
             return index, {}
     
     def _process_single_report_hybrid(self, report_text: str, grade_semialgo: int, index: int) -> Tuple[int, Dict]:
@@ -150,7 +150,7 @@ class BatchCXRProcessor:
             result = classifier.gradeReportHybrid(report_text, grade_semialgo)
             return index, result
         except Exception as e:
-            print(f"Error processing report {index} (hybrid): {e}")
+            print("Report processing failed")
             return index, {}
     
     def _process_single_report_judge(self, report_text: str, algo_grade: int, llm_grade: int, index: int, manual_grade: Optional[int] = None) -> Tuple[int, Dict]:
@@ -164,7 +164,7 @@ class BatchCXRProcessor:
 
             return index, result_dict
         except Exception as e:
-            print(f"Error processing report {index} (judge): {e}")
+            print("Report processing failed")
             # Return default values matching the expected output
             return index, {
                 'judge_grade': 0,
@@ -183,7 +183,7 @@ class BatchCXRProcessor:
             result = classifier.gradeLunit(report_text)
             return index, result
         except Exception as e:
-            print(f"Error processing report {index} (Lunit): {e}")
+            print("Report processing failed")
             return index, {}
     
     def process_semialgo_batch(self, df: pd.DataFrame, report_column: str = 'REPORT') -> pd.DataFrame:
@@ -216,7 +216,7 @@ class BatchCXRProcessor:
                     results[index] = result
                 except Exception as e:
                     index = future_to_index[future]
-                    print(f"Error in future for index {index}: {e}")
+                    print("Report processing failed")
                     results[index] = {}
         
         # Add results to dataframe
@@ -230,7 +230,7 @@ class BatchCXRProcessor:
         semialgo_df = pd.DataFrame(semialgo_data, index=df.index)
         return pd.concat([df_result, semialgo_df], axis=1)
     
-    def process_llm_batch(self, df: pd.DataFrame, report_column: str = 'REPORT') -> pd.DataFrame:
+    def process_llm_batch(self, df: pd.DataFrame, report_column: str = 'REPORT', strict=False) -> pd.DataFrame:
         """
         Process a batch of reports using LLM method concurrently.
         
@@ -261,14 +261,19 @@ class BatchCXRProcessor:
             for future in tqdm(as_completed(future_to_index), total=len(future_to_index), desc="LLM processing"):
                 try:
                     index, result = future.result()
-                    results[index] = extract_grade(result)
+                    grade = extract_grade(result)
+                    if strict and (type(grade) is not int or not 1 <= grade <= 6):
+                        raise ValueError('required_llm_grade_invalid')
+                    results[index] = grade
                     completed += 1
                     # Update progress every 5 reports or at completion
                     if completed % 5 == 0 or completed == total:
                         self._update_progress("llm", completed, total, f"LLM grading: {completed}/{total} reports processed")
                 except Exception as e:
+                    if strict:
+                        raise ValueError('required_llm_step_failed') from None
                     index = future_to_index[future]
-                    print(f"Error in future for index {index}: {e}")
+                    print("Report processing failed")
                     results[index] = 0
                     completed += 1
         
@@ -312,7 +317,7 @@ class BatchCXRProcessor:
                     results[index] = {'grade': grade, 'explanation': explanation}
                 except Exception as e:
                     index = future_to_index[future]
-                    print(f"Error in future for index {index}: {e}")
+                    print("Report processing failed")
                     results[index] = {'grade': 0, 'explanation': ''}
         
         # Add results to dataframe
@@ -359,7 +364,7 @@ class BatchCXRProcessor:
                     results[index] = result
                 except Exception as e:
                     index = future_to_index[future]
-                    print(f"Error in future for index {index}: {e}")
+                    print("Report processing failed")
                     results[index] = {
                         'judge_grade': 0,
                         'judge_choice': 0,
@@ -377,7 +382,7 @@ class BatchCXRProcessor:
         
         return df_result
     
-    def process_lunit_batch(self, df: pd.DataFrame, report_column: str = 'REPORT') -> pd.DataFrame:
+    def process_lunit_batch(self, df: pd.DataFrame, report_column: str = 'REPORT', strict=False) -> pd.DataFrame:
         """
         Process a batch of reports using Lunit extraction method concurrently.
         
@@ -408,14 +413,18 @@ class BatchCXRProcessor:
             for future in tqdm(as_completed(future_to_index), total=len(future_to_index), desc="Supplemental processing"):
                 try:
                     index, result = future.result()
+                    if strict and (not isinstance(result, dict) or set(result) != {'atelectasis_llm', 'calcification_llm', 'cardiomegaly_llm', 'consolidation_llm', 'fibrosis_llm', 'mediastinal_widening_llm', 'nodule_llm', 'pleural_effusion_llm', 'pneumoperitoneum_llm', 'pneumothorax_llm', 'tb'} or any(type(v) is not bool for v in result.values())):
+                        raise ValueError('required_findings_invalid')
                     results[index] = result
                     completed += 1
                     # Update progress every 5 reports or at completion
                     if completed % 5 == 0 or completed == total:
                         self._update_progress("lunit", completed, total, f"Detailed findings: {completed}/{total} reports processed")
                 except Exception as e:
+                    if strict:
+                        raise ValueError('required_supplemental_step_failed') from None
                     index = future_to_index[future]
-                    print(f"Error in future for index {index}: {e}")
+                    print("Report processing failed")
                     results[index] = {'atelectasis_llm': False, 'calcification_llm': False, 'cardiomegaly_llm': False, 'consolidation_llm': False, 
                                       'fibrosis_llm': False, 'mediastinal_widening_llm': False, 'nodule_llm': False, 'pleural_effusion_llm': False, 
                                       'pneumoperitoneum_llm': False, 'pneumothorax_llm': False, 'tb': False}
@@ -432,7 +441,7 @@ class BatchCXRProcessor:
     
     def process_full_pipeline(self, df: pd.DataFrame, report_column: str = 'REPORT',
                             steps: List[str] = ['semialgo', 'hybrid', 'llm', 'judge','lunit'],
-                            save_intermediate: bool = True, gt_present: bool = False, output_dir: str = '/tmp') -> pd.DataFrame:
+                            save_intermediate: bool = True, gt_present: bool = False, output_dir: str = '/tmp', strict=False) -> pd.DataFrame:
         """
         Process the full pipeline: semialgo -> hybrid -> LLM -> judge -> lunit
         
@@ -477,7 +486,7 @@ class BatchCXRProcessor:
         # Step 3: LLM processing
         if 'llm' in steps:
             print("\n=== Step 3: LLM Processing ===")
-            df_processed = self.process_llm_batch(df_processed, report_column)
+            df_processed = self.process_llm_batch(df_processed, report_column, strict=strict)
             if save_intermediate:
                 df_processed.to_csv(os.path.join(output_dir, 'intermediate_llm.csv'), index=False)
         
@@ -506,7 +515,7 @@ class BatchCXRProcessor:
         # Step 5: Lunit extraction (supplemental)
         if 'lunit' in steps:
             print("\n=== Step 5: Lunit Extraction (Supplemental) ===")
-            df_processed = self.process_lunit_batch(df_processed, report_column)
+            df_processed = self.process_lunit_batch(df_processed, report_column, strict=strict)
             if save_intermediate:
                 df_processed.to_csv(os.path.join(output_dir, 'intermediate_lunit.csv'), index=False)
         

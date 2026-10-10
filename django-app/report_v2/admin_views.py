@@ -41,6 +41,7 @@ from django.utils.text import slugify
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_GET, require_POST
 
+from .field_semantics import current_settings
 from . import data
 from . import permissions
 from . import seeding
@@ -610,10 +611,10 @@ def editor_visual(request):
         if operation:
             if isinstance(operation, str):
                 operation = json.loads(operation)
-            text, layout = visual.transform(text, operation)
+            text, layout = visual.transform(text, operation, settings=current_settings())
         else:
             layout = visual.project_document(text)
-        return JsonResponse({"yaml_text": text, "layout": layout, "catalog": visual.catalog()})
+        return JsonResponse({"yaml_text": text, "layout": layout, "catalog": visual.catalog(current_settings())})
     except (DefinitionError, ValueError, DisplayValidationError) as exc:
         errors = getattr(exc, "errors", None)
         messages = [f"{error.get('path') or '$'}: {error['message']}" for error in errors] if errors else [str(exc)]

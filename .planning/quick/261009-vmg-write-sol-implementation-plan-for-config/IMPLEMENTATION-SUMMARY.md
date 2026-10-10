@@ -1,0 +1,13 @@
+# Implementation handoff — 2026-10-11
+
+Implemented through GSD quick task 261011-1cj. No deployment or production data access.
+
+Added supporting catalogue/format/preview models and migration 0005 without changing CXRStudy. Admin upload settings manage compatible semantics, aliases, ordered formats and revisions. Shared UI/API inspection validates bounded CSV/XLS/XLSX, merges identifiers, rejects conflicts/invalid values, excludes incomplete new studies and stages safe enrichment. Confirmation binds the owner, parsed content, configuration and database baseline. Canonical processing uses the existing OpenAI-compatible backend and grading method with explicit required-step failures. All accepted inserts/enrichment commit atomically; repeated persistence is idempotent. Historical generic import mutation routes return migration guidance. Saved report cards retain field semantics after defaults change.
+
+The API tier required a narrow authenticated /analyze-canonical endpoint and strict batch failure handling. It does not replace inference or grading. Jobs now require exactly one format_id or column_mapping per file in upload_manifest; existing callers must migrate. See docs/agent-api.md and docs/upload-configuration.md.
+
+Parser limits: 20 files, 49 MiB input, 50,000 rows, 128 columns, 64 KiB cell, 128 MiB expanded data, 25 seconds per file and 60 seconds total, 768 MiB subprocess memory. Linux native staging applies Landlock, seccomp and resource limits; Windows development uses Job Object resource limits. Synthetic Linux checks verified filesystem/network denial and exact identifiers. Encrypted workbooks are supported; formula/macro/external-link and precision-loss input rejects. Previews expire after 30 minutes; schedule configure_uploads --cleanup-only. Successful remote task cleanup is best effort; network failures need existing task administration.
+
+Verification results are recorded in the execution summary alongside the final commit. Supporting migration SQL contains only the three new tables; migration regression preserves a historical synthetic row and seed runs preserve configuration. Tests use synthetic fixtures only, including Chromium upload interaction, auth/CSRF, strict manifests, merging, parser protections, stale previews, rollback/idempotence and report snapshot stability.
+
+Deployment gates: PostgreSQL concurrent compare-and-fill, actual Docker/Nginx limits and nginx -t, production-kernel isolation and representative synthetic end-to-end real vLLM processing remain unchecked locally. PRIME only. Follow rollout/rollback documentation and drain active uploads before rollback; preserve report snapshots/configuration backups. No automatic migration, seeding or service restart was performed.

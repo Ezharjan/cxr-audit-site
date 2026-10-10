@@ -17,8 +17,9 @@ PRESETS = {'value': [3, 3], 'table': [12, 5], 'line': [6, 6], 'bar': [6, 6],
            'text': [12, 2], 'divider': [12, 1], 'heading': [12, 1]}
 
 
-def catalog():
-    project = get_project_definition()
+def catalog(settings=None):
+    from ..field_semantics import configured_project
+    project = configured_project(settings) if settings is not None else get_project_definition()
     return {
         'presets': PRESETS,
         'measurements': [{'id': m.measurement_id, 'label': m.measurement_id.replace('_', ' ').capitalize(),
@@ -28,7 +29,7 @@ def catalog():
                           'columns': COLUMN_ALLOW_LIST.get(m.measurement_id, [])}
                          for m in project.measurements.values()],
         'sources': [{'id': s.source_id, 'label': s.label or s.source_id.replace('_', ' ').capitalize(),
-                     'kind': s.kind} for s in project.sources.values()],
+                     'kind': s.kind, 'unit': s.unit} for s in project.sources.values()],
         'dimensions': [{'id': d.dimension_id, 'label': d.label or d.dimension_id}
                        for d in project.dimensions.values()],
         'policies': [{'id': p.ref, 'label': p.policy_id.replace('_', ' ').capitalize() + ' (v' + str(p.version) + ')',
@@ -42,7 +43,9 @@ def catalog():
 def validate_card(widget):
     if widget['type'] in STATIC_TYPES:
         return
-    project = get_project_definition()
+    from ..field_semantics import widget_project, validate_bindings
+    project = widget_project(widget)
+    validate_bindings(widget, project)
     query = widget['query']
     measurement = project.measurements.get(query['measurement'])
     if not measurement or widget['type'] not in measurement.supported_displays:
@@ -111,7 +114,7 @@ def project_document(text):
     return document
 
 
-def transform(text, operation):
+def transform(text, operation, settings=None):
     document = project_document(text)
     if not isinstance(operation, dict) or operation.get('action') not in {'add','edit','delete','move','resize'}:
         raise ValueError('Choose a supported card action.')
@@ -130,6 +133,9 @@ def transform(text, operation):
         if not isinstance(patch, dict):
             raise ValueError('Provide the card options.')
         candidate = deepcopy(patch)
+        if settings is not None:
+            from ..field_semantics import pin
+            pin(candidate, settings)
         if action == 'add':
             used = {w['id'] for s in document['sections'] for w in s['widgets']}
             index = 1

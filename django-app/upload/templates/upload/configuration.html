@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Upload configuration — PRIMER{% endblock %}
+{% block body %}
+<div class="page-header"><h1>Upload configuration</h1></div>
+<p>PRIME field meanings and file formats. Storage columns and write permissions are fixed. Changes apply to new previews and new report elements.</p>
+<p><a href="{% url 'upload:index' %}">Upload files</a></p>
+<p id="configurationMessage" role="status" aria-live="polite"></p>
+<form class="card" id="seedForm">{% csrf_token %}<input type="hidden" name="action" value="seed"><button type="submit">Seed missing fields and example formats</button><p>Existing administrator settings are preserved. Example formats require the exact saved header set for API use.</p></form>
+<form class="card" id="fieldForm">{% csrf_token %}
+<h2>Fields</h2><label for="fieldIdentifier">Field</label><select id="fieldIdentifier" name="identifier"></select>
+<p id="fieldStorage"></p><input type="hidden" name="action" value="field"><input type="hidden" name="revision" id="fieldRevision">
+<label for="fieldSettings">Field settings (JSON)</label><textarea id="fieldSettings" name="settings" rows="16" style="width:100%"></textarea>
+<p>Interpretations: identifier, integer, measurement, age, binary, nominal, ordered, date_time, duration, free_text. Aliases are case sensitive. Bins are [label, lower, upper] half-open intervals; null outer bounds include out-of-range values. Zero and false remain values.</p>
+<button type="button" id="profileField">Suggest bins from at most 1,000 rows</button><pre id="profileResult"></pre><button type="submit">Save field settings</button>
+</form>
+<form class="card" id="formatForm">{% csrf_token %}
+<h2>File formats</h2><label for="formatChoice">Saved format</label><select id="formatChoice"><option value="">New format</option></select>
+<label for="formatIdentifier">Stable format ID</label><input id="formatIdentifier" name="identifier" required pattern="[a-z0-9][a-z0-9-]{0,63}">
+<input type="hidden" name="action" value="format"><input type="hidden" name="revision" id="formatRevision" value="0">
+<label for="formatSettings">Format settings (JSON)</label><textarea id="formatSettings" name="settings" rows="18" style="width:100%"></textarea>
+<p>Map each header to a permitted field or an empty string to exclude it. Rules accept missing sentinels, value dictionaries, predefined date_format, timezone and unit. File names do not determine format meaning.</p><button type="submit">Save format</button>
+</form>
+{{ catalogue|json_script:"fieldCatalogue" }}{{ formats|json_script:"formatCatalogue" }}
+{% endblock %}
+{% block extra_js %}<script src="{% static 'upload/configuration.js' %}"></script>{% endblock %}

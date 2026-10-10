@@ -594,6 +594,50 @@ async def analyze_auto_sort_files(
         message=f"Files uploaded and sorted successfully ({len(carpl_file_paths)} CARPL, {len(ge_file_paths)} GE). Processing started in background."
     )
 
+
+
+def process_canonical_sync(task_id, rows, supplemental):
+    from canonical_processing import process, safe_csv
+    from class_process_carpl import processor as batch_processor
+    try:
+        processing_results[task_id]['status'] = 'processing'
+        batch_processor.set_progress_callback(create_progress_callback(task_id, supplemental_steps=supplemental))
+        outputs = process(rows, batch_processor, thresholds, supplemental)
+        processing_results[task_id].update(status='completed', progress_percent=100,
+            progress='Analysis complete', completed_at=datetime.now().isoformat(),
+            results={'canonical_rows': outputs, 'txt_report': f'Processed {len(outputs)} studies.', 'csv_data': safe_csv(outputs), 'filename': 'cxr_' + task_id})
+    except Exception:
+        processing_results[task_id].update(status='failed', error='Required processing failed', completed_at=datetime.now().isoformat())
+    finally:
+        rows.clear()
+
+
+@api_app.post('/analyze-canonical', response_model=ProcessingResponse)
+async def analyze_canonical(request: Request, background_tasks: BackgroundTasks):
+    from canonical_processing import validate_rows
+    if request.headers.get('content-type', '').split(';')[0] != 'application/json':
+        raise HTTPException(400, detail='JSON required')
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > 49 * 1024 * 1024:
+            raise HTTPException(413, detail='Payload too large')
+        body.extend(chunk)
+    try:
+        payload = json.loads(body)
+        if not isinstance(payload, dict) or set(payload) != {'project', 'rows', 'supplemental_steps'} or payload['project'] != 'prime' or type(payload['supplemental_steps']) is not bool:
+            raise ValueError()
+        rows = validate_rows(payload['rows'])
+    except (ValueError, TypeError, KeyError):
+        raise HTTPException(400, detail='Invalid canonical input') from None
+    if any(t['status'] in ('queued', 'processing') for t in processing_results.values()):
+        raise HTTPException(409, detail='Processor busy')
+    task_id = str(uuid.uuid4())
+    processing_results[task_id] = dict(task_id=task_id, status='queued', progress='Queued', progress_percent=0,
+        results=None, error=None, created_at=datetime.now().isoformat(), completed_at=None,
+        supplemental_steps=payload['supplemental_steps'])
+    background_tasks.add_task(process_canonical_sync, task_id, rows, payload['supplemental_steps'])
+    return ProcessingResponse(task_id=task_id, status='queued', message='Validated studies queued')
+
 @api_app.get("/status/{task_id}", response_model=ProcessingStatus)
 async def get_processing_status(task_id: str):
     """Get the current status of a processing task."""

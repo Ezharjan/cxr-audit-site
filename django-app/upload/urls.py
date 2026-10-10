@@ -6,11 +6,12 @@ URL configuration for the upload app.
 """
 
 from django.urls import path
-from . import views
+from . import views, workflow_views, config_views
 
 app_name = 'upload'
 
 urlpatterns = [
+    path('configuration/', config_views.configuration, name='configuration'),
     # Main interface
     path('', views.index, name='index'),
     
@@ -21,9 +22,9 @@ urlpatterns = [
     path('api/backfill-supplemental', views.backfill_supplemental, name='backfill_supplemental'),
     
     # Import historical data
-    path('import/', views.import_data, name='import_data'),
-    path('api/import/preview', views.import_preview, name='import_preview'),
-    path('api/import/confirm', views.import_confirm, name='import_confirm'),
+    path('import/', workflow_views.retired_import, name='import_data'),
+    path('api/import/preview', workflow_views.retired_import, name='import_preview'),
+    path('api/import/confirm', workflow_views.retired_import, name='import_confirm'),
     
     # API server health check
     path('api/check-connection', views.check_api_connection, name='check_api_connection'),
@@ -32,14 +33,14 @@ urlpatterns = [
     path('api/check-llm', views.check_llm_connection, name='check_llm_connection'),
     
     # Pre-check files against database
-    path('api/precheck', views.precheck_files, name='precheck_files'),
+    path('api/precheck', workflow_views.precheck, name='precheck_files'),
     
     # Active task check (for resume-on-page-load)
     path('api/active-task', views.get_active_task, name='get_active_task'),
     
     # Proxy endpoints to backend API server
-    path('api/analyze-multiple', views.analyze_multiple, name='analyze_multiple'),
-    path('api/analyze-auto-sort', views.analyze_auto_sort, name='analyze_auto_sort'),
+    path('api/analyze-multiple', workflow_views.submit, name='analyze_multiple'),
+    path('api/analyze-auto-sort', workflow_views.submit, name='analyze_auto_sort'),
     path('api/status/<str:task_id>', views.get_status, name='get_status'),
     path('api/results/<str:task_id>', views.get_results, name='get_results'),
     

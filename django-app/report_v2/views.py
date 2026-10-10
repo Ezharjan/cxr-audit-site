@@ -206,6 +206,8 @@ def _allowed_controls(widget: dict) -> dict:
     """The client-visible control surface for a widget (a copy of its controls + a few read-only hints)."""
     if widget.get("type") in {"text", "divider", "heading"}:
         return {"enabled": False}
+    from .field_semantics import widget_project
+    project = widget_project(widget) if "field_semantics" in widget.get("query", {}) else get_project_definition()
     controls = widget.get("controls") or {}
     query = widget.get("query") or {}
     window = {"start": "D-30", "end": "D", **(widget.get("window") or {})}
@@ -217,7 +219,7 @@ def _allowed_controls(widget: dict) -> dict:
         "date_range": bool(controls.get("date_range")),
         "filters": list(controls.get("filters") or ()),
         "compare_by": [
-            {"id": name, "label": get_project_definition().dimension(name).label or name}
+            {"id": name, "label": project.dimension(name).label or name}
             for name in controls.get("compare_by") or ()
         ],
         "measurement": query.get("measurement"),
@@ -368,7 +370,8 @@ def _evaluate(
         return {"widget_id": widget["id"], "static_type": widget["type"], "text": widget.get("text", ""), "title": widget.get("title", "")}
     if rows is None:
         rows = data.fetch_project_rows(_PROJECT_ID, layout_widget=widget)
-    project = get_project_definition()
+    from .field_semantics import widget_project
+    project = widget_project(widget) if 'field_semantics' in widget.get('query', {}) else get_project_definition()
     rows = [dict(row) for row in rows]
     dimensions = project.dimensions
     for row in rows:

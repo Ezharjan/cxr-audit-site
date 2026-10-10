@@ -267,7 +267,8 @@ def fetch_project_rows(
     """
     from upload.models import CXRStudy  # local import: keep DB/apps out of module import time
 
-    project = get_project_definition()
+    from .field_semantics import widget_project
+    project = widget_project(layout_widget) if 'field_semantics' in (layout_widget or {}).get('query', {}) else get_project_definition()
     if project_id != project.project_id:
         raise AdapterError("unsupported reporting project")
     query = (layout_widget or {}).get("query", {}) or {}

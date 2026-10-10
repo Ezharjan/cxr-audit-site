@@ -414,6 +414,15 @@ class DefinitionRepository:
             validate_display(data)
         except DisplayValidationError as exc:
             raise PublishRejectedError(str(exc)) from exc
+        try:
+            from ..field_semantics import widget_project, validate_bindings
+            for section in data.get('sections', []):
+                for widget in section.get('widgets', []):
+                    if 'field_semantics' in widget.get('query', {}):
+                        from .visual import validate_card
+                        validate_card(widget)
+        except (ValueError, TypeError, KeyError) as exc:
+            raise PublishRejectedError(str(exc)) from exc
         return data
 
     def _check_project_refs(self, data: dict[str, Any]) -> None:

@@ -29,28 +29,38 @@ MAX_UPLOAD_BYTES = 49 * 1024 * 1024
 
 @api_endpoint("POST")
 def jobs(request, project):
+    from upload.ingestion import inspect, create_preview, confirm, public_counts
+    from upload.workflow_views import manifest_value
     if request.content_type != "multipart/form-data":
         raise APIError("multipart_required")
-    if set(request.POST) - {"supplemental_steps"} or set(request.FILES) - {"files"}:
+    if set(request.POST) - {"supplemental_steps", "upload_manifest"} or set(request.FILES) - {"files"}:
         raise APIError("unexpected_fields")
     steps = request.POST.get("supplemental_steps", "false")
     if steps not in ("true", "false") or len(request.POST.getlist("supplemental_steps")) > 1:
         raise APIError("invalid_supplemental_steps")
+    if len(request.POST.getlist('upload_manifest')) != 1:
+        raise APIError('upload_manifest_required')
+    try:
+        manifest = manifest_value(request.POST['upload_manifest'])
+    except (ValueError, TypeError):
+        raise APIError('invalid_upload_manifest') from None
     files = request.FILES.getlist("files")
     if not 1 <= len(files) <= MAX_FILES:
         raise APIError("invalid_file_count")
     if sum(f.size for f in files) > MAX_UPLOAD_BYTES:
         raise APIError("upload_too_large", 413)
-    digest = hashlib.sha256(steps.encode())
-    forwarded = []
-    for file in files:
+    if not isinstance(manifest, list) or len(manifest) != len(files):
+        raise APIError('manifest_file_count_mismatch')
+    # The request hash permits accepted retries after defaults change. The first acceptance pins
+    # effective configuration in its private preview; retries never reparse or reinterpret it.
+    digest = hashlib.sha256(json.dumps([project, steps, manifest], sort_keys=True).encode())
+    for index, file in enumerate(files):
         if file.size == 0 or len(file.name) > 255 or any(c in file.name for c in "\\/\r\n\x00") or PurePath(file.name).suffix.lower() not in {".csv", ".xlsx", ".xls"}:
             raise APIError("invalid_file")
-        digest.update(json.dumps([file.name, file.size]).encode())
+        digest.update(json.dumps([index, file.name, file.size]).encode())
         for chunk in file.chunks():
             digest.update(chunk)
         file.seek(0)
-        forwarded.append(("files", (file.name, file, file.content_type or "application/octet-stream")))
     entry, replay = claim(request, project, "upload", digest.hexdigest())
     if replay:
         return replay
@@ -62,16 +72,27 @@ def jobs(request, project):
         authenticate(request, project)
         record(request, "api_upload_dispatch", project=project, file_count=len(files))
     try:
-        submit_files(forwarded, steps == "true", before_dispatch=before_dispatch, track=track)
+        payload, byte_digest = inspect(files, manifest, project, api=True)
+        counts = payload['summary']
+        if counts['blocked']:
+            record(request, 'api_upload_rejected', project=project, error_count=len(counts['errors']))
+            return finish(entry, {'error': {'code': 'invalid_submission', 'message': 'Correct invalid rows and mappings.'}, 'counts': counts}, 400)
+        preview = create_preview(request.user, project, payload, byte_digest, steps == 'true')
+        result = confirm(preview, before_dispatch=before_dispatch, track=track)
+        if job is None:
+            return finish(entry, {'status': 'completed', 'counts': public_counts(counts)}, 200)
     except SubmissionError as exc:
         if exc.ambiguous:
             uncertain(entry)
             raise APIError(exc.code, exc.status)
         return finish(entry, {"error": {"code": exc.code, "message": exc.code.replace("_", " ")}}, exc.status)
+    except (ValueError, TypeError, KeyError) as exc:
+        return finish(entry, {'error': {'code': 'invalid_upload', 'message': 'Provide exactly one project format_id or column_mapping per file, with valid source values.'}}, 400)
     except Exception:
         uncertain(entry)
         raise
-    body = {"job_id": str(job.pk), "status": "queued", "status_url": reverse("agent_api:job_status", kwargs={"project": project, "job_id": job.pk})}
+    body = {"job_id": str(job.pk), "status": "queued", "counts": public_counts(counts),
+            "status_url": reverse("agent_api:job_status", kwargs={"project": project, "job_id": job.pk})}
     record(request, "api_upload_accepted", project=project, job_id=str(job.pk))
     return finish(entry, body, 202)
 
@@ -106,6 +127,9 @@ def job_status(request, project, job_id):
     if state == "cancelled":
         state = "failed"
     body = {"job_id": str(job.pk), "project": project, "status": state, "progress_percent": max(0, min(100, task.progress_percent))}
+    if state in ("failed", "completed"):
+        from upload.ingestion import cleanup
+        cleanup()
     if state == "failed":
         body["error"] = {"code": "processing_failed", "message": "processing failed"}
     return JsonResponse(body)

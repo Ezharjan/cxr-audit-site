@@ -44,8 +44,11 @@ class APITests(TestCase):
         override.enable()
         self.addCleanup(override.disable)
 
-    def upload(self, value="upload-one", content=b"SYNTH,CSV\n1,2\n", **kwargs):
-        return self.client.post("/api/prime/jobs", {"files": [SimpleUploadedFile("synthetic.csv", content, "text/csv")], **kwargs},
+    def upload(self, value="upload-one", content=None, **kwargs):
+        from upload.test_ingestion import csv_file, source
+        default = csv_file([source()]).read()
+        kwargs.setdefault('upload_manifest', json.dumps([{'column_mapping':{name:name for name in source()}}]))
+        return self.client.post("/api/prime/jobs", {"files": [SimpleUploadedFile("synthetic.csv", default if content is None else content, "text/csv")], **kwargs},
                                 headers={**self.headers, "Idempotency-Key": value})
 
     def email(self, value="email-one", body=None):
@@ -158,12 +161,16 @@ class APITests(TestCase):
         other_key, other_secret = create_key(self.other, "Other", timezone.now() + timedelta(days=1), ["prime"])
         self.assertEqual(self.client.get(result.json()["status_url"], headers={"X-API-Key": other_secret}).status_code, 404)
         replacement, raw = create_key(self.owner, "Replacement", timezone.now() + timedelta(days=1), ["prime"])
+        from upload.models import UploadPreview
+        pinned = UploadPreview.objects.get(task=job.task).payload
         with patch("agent_api.views.requests.get", return_value=Mock(status_code=404)):
             self.assertEqual(self.client.get(result.json()["status_url"], headers={"X-API-Key": raw}).json()["status"], "failed")
         job.task.refresh_from_db()
         job.task.status = "processing"
         job.task.save()
-        result_csv = {"csv_data": "ACCESSION_NO,ABNORMAL\n990000001,42\n"}
+        from upload.test_ingestion import source, outputs
+        UploadPreview.objects.filter(task=job.task).update(payload=pinned, state='submitted')
+        result_csv = {'canonical_rows': outputs([source()])}
         self.assertEqual(persist_result(task_id, result_csv), (1, 0))
         self.assertEqual(persist_result(task_id, result_csv), (1, 0))
         self.assertEqual(CXRStudy.objects.count(), 1)
@@ -186,7 +193,7 @@ class APITests(TestCase):
         with self.assertRaises(SubmissionError):
             reserve_submission()
         self.client.force_login(self.owner)
-        self.assertEqual(self.client.post("/upload/api/analyze-auto-sort", {"files": SimpleUploadedFile("synthetic.csv", b"x")}).status_code, 409)
+        self.assertEqual(self.client.post("/upload/api/analyze-auto-sort", {"files": SimpleUploadedFile("synthetic.csv", b"x")}).status_code, 400)
         task = ProcessingTask.objects.create(task_id=str(uuid.uuid4()), status="failed")
         SubmissionReservation.objects.update(task=task)
         second = reserve_submission()
@@ -308,7 +315,8 @@ class APITests(TestCase):
         post.return_value = Mock(status_code=200, json=lambda: {"task_id": task_id})
         upload = self.upload()
         self.assertEqual(upload.status_code, 202)
-        persist_result(task_id, {"csv_data": "ACCESSION_NO,ABNORMAL\n990000002,55\n"})
+        from upload.test_ingestion import source, outputs
+        persist_result(task_id, {'canonical_rows':outputs([source()])})
         self.assertEqual(self.client.get(upload.json()["status_url"], headers=self.headers).json()["status"], "completed")
         self.publish()
         self.assertEqual(len(self.client.get("/api/prime/reports", headers=self.headers).json()["reports"]), 1)

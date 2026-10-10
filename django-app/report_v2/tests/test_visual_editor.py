@@ -58,7 +58,7 @@ class VisualEditorTests(SimpleTestCase):
         self.assertEqual(admin_views.editor_visual(request).status_code, 403)
         request.user.is_superuser = True
         request._dont_enforce_csrf_checks = True
-        with patch.object(admin_views, '_repository', side_effect=AssertionError('must not persist')):
+        with patch.object(admin_views, '_repository', side_effect=AssertionError('must not persist')), patch.object(admin_views, 'current_settings', return_value={}):
             response = admin_views.editor_visual(request)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(json.loads(response.content)['yaml_text'], VALID_YAML)

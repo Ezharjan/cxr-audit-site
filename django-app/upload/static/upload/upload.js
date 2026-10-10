@@ -3,6 +3,11 @@ let currentTaskId = null;
 let statusCheckInterval = null;
 let csrfToken = window.PAGE_CONFIG.csrfToken;
 let currentResults = null;
+let previewId = null;
+let previousPreviewId = null;
+let uploadCheck = null;
+let mappingManifest = null;
+const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 // ══════════ Initialization ══════════
 document.addEventListener('DOMContentLoaded', async () => {
@@ -98,12 +103,14 @@ document.getElementById('lunitFiles').addEventListener('change', e => handleFile
 document.getElementById('gtFiles').addEventListener('change', e => handleFiles(e.target, 'gtFilesSelected'));
 
 function handleFiles(input, displayId) {
+    previewId = null; mappingManifest = null; uploadCheck = null;
+    document.getElementById('precheckPanel').style.display = 'none';
     const files = input.files;
     const el = document.getElementById(displayId);
     if (!files.length) { el.style.display = 'none'; return; }
 
     let total = 0, items = [];
-    for (const f of files) { total += f.size; items.push(`<div class="file-item"><span>${f.name}</span><span>${fmtSize(f.size)}</span></div>`); }
+    for (const f of files) { total += f.size; items.push(`<div class="file-item"><span>${escapeHtml(f.name)}</span><span>${fmtSize(f.size)}</span></div>`); }
 
     let listHtml;
     if (files.length <= 5) { listHtml = `<div class="file-list">${items.join('')}</div>`; }
@@ -126,7 +133,9 @@ function fmtSize(b) {
 }
 
 function clearFiles(inputId, displayId) {
+    previewId = null; mappingManifest = null;
     document.getElementById(inputId).value = '';
+    document.getElementById('precheckPanel').style.display = 'none';
     const el = document.getElementById(displayId);
     el.style.display = 'none'; el.innerHTML = '';
 }
@@ -158,137 +167,118 @@ dropZones[1].addEventListener('click', () => document.getElementById('gtFiles').
 setupDragAndDrop('lunitFiles', dropZones[0], 'lunitFilesSelected');
 setupDragAndDrop('gtFiles',    dropZones[1], 'gtFilesSelected');
 
-// ══════════ Form submit (Upload & Check) ══════════
+// Inspect, map, preview, then confirm the exact private preview.
 document.getElementById('uploadForm').addEventListener('submit', async e => {
     e.preventDefault();
-    const lunit = document.getElementById('lunitFiles').files;
-    const gt    = document.getElementById('gtFiles').files;
-    if (!lunit.length || !gt.length) { alert('Please select files for both CARPL and RIS.'); return; }
-
-    const btn = document.getElementById('submitBtn');
-    btn.disabled = true; btn.textContent = 'Checking database\u2026';
-
-    // Hide any previous panels
-    document.getElementById('precheckPanel').style.display = 'none';
-    document.getElementById('statusContainer').style.display = 'none';
-    document.getElementById('resultsContainer').style.display = 'none';
-
-    try {
-        const checkFd = new FormData();
-        for (const f of lunit) checkFd.append('files', f);
-        for (const f of gt)    checkFd.append('files', f);
-
-        const r = await fetch(`${API_BASE_URL}/precheck`, {
-            method: 'POST', body: checkFd,
-            headers: { 'X-CSRFToken': csrfToken }
-        });
-        const check = await r.json();
-
-        if (check.error) {
-            showError(`Pre-check error: ${check.error}`);
-            btn.disabled = false; btn.textContent = 'Upload & check';
-            return;
-        }
-
-        showPrecheckPanel(check);
-    } catch(e) {
-        showError(`Pre-check failed: ${e.message}`);
-    }
-    btn.disabled = false; btn.textContent = 'Upload & check';
+    await checkUpload();
 });
+
+async function checkUpload() {
+    const files = [...document.getElementById('lunitFiles').files, ...document.getElementById('gtFiles').files];
+    if (!files.length) { alert('Select at least one source file.'); return; }
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true; btn.textContent = 'Checking files…';
+    const fd = new FormData();
+    files.forEach(f => fd.append('files', f));
+    fd.append('supplemental_steps', document.getElementById('supplementalSteps').checked ? 'true' : 'false');
+    if (mappingManifest) fd.append('upload_manifest', JSON.stringify(mappingManifest));
+    if (previousPreviewId) fd.append('previous_preview', previousPreviewId);
+    previewId = null;
+    try {
+        const r = await fetch(`${API_BASE_URL}/precheck`, {method:'POST',body:fd,headers:{'X-CSRFToken':csrfToken}});
+        const result = await r.json();
+        if (!r.ok || result.error) throw new Error(result.error || 'File check failed.');
+        uploadCheck = result; previewId = result.preview_id || null; previousPreviewId = previewId;
+        showPrecheckPanel(result);
+    } catch (error) { showError(error.message); }
+    finally { btn.disabled=false; btn.textContent='Upload & check'; }
+}
+
+function mappingChanged() {
+    previewId = null;
+    const btn = document.getElementById('startAnalysisBtn');
+    btn.disabled = true; btn.textContent = 'Recheck mappings before confirming';
+    document.getElementById('recheckMappingsBtn').hidden = false;
+}
 
 function showPrecheckPanel(check) {
     const panel = document.getElementById('precheckPanel');
-
-    // File list
-    let filesHtml = '';
-    if (check.files && check.files.length) {
-        check.files.forEach(f => {
-            const badge = f.type === 'carpl'
-                ? `<span class="file-badge carpl">CARPL \u00B7 ${f.accessions} accessions</span>`
-                : `<span class="file-badge ris">RIS/GE</span>`;
-            filesHtml += `<div class="file-row"><span>${f.name} <small style="color:var(--c-text-muted)">(${f.rows} rows)</small></span>${badge}</div>`;
+    const container = document.getElementById('precheckFiles');
+    container.replaceChildren();
+    mappingManifest = check.files.map(f => f.format_id ? {format_id:f.format_id} : {column_mapping:{...f.mapping}});
+    check.files.forEach((file, index) => {
+        const section = document.createElement('section');
+        const heading = document.createElement('h4'); heading.textContent=`${file.name} (${file.rows} rows)`;
+        section.append(heading);
+        const label = document.createElement('label'); label.textContent='File format'; label.htmlFor=`format-${index}`;
+        const select = document.createElement('select'); select.id=label.htmlFor;
+        select.add(new Option('Custom mapping', ''));
+        check.formats.forEach(f => select.add(new Option(f.name, f.format_id)));
+        select.value=file.format_id || '';
+        let selectedFormat = select.value;
+        section.append(label,select);
+        const table = document.createElement('table');
+        const columns = [];
+        Object.entries(file.mapping).forEach(([header,destination], column) => {
+            const row=document.createElement('tr'); const source=document.createElement('th'); source.scope='row'; source.textContent=header;
+            const cell=document.createElement('td'); const allocation=document.createElement('select'); allocation.id=`mapping-${index}-${column}`;
+            allocation.setAttribute('aria-label',`${header}: destination field`);
+            allocation.add(new Option('Excluded', ''));
+            Object.entries(check.fields).forEach(([id,field]) => allocation.add(new Option(field.label, id)));
+            allocation.value=destination;
+            allocation.addEventListener('change', () => {
+                mappingManifest[index]={column_mapping:Object.fromEntries(columns.map(([h,a]) => [h,a.value]))};
+                select.value=''; selectedFormat=''; mappingChanged();
+            });
+            columns.push([header,allocation]); cell.append(allocation); row.append(source,cell); table.append(row);
         });
-    }
-    document.getElementById('precheckFiles').innerHTML = filesHtml;
-
-    // Stats
-    const statsEl = document.getElementById('precheckStats');
-    statsEl.innerHTML = `
-        <h4 style="margin:0 0 8px;">Database check</h4>
-        <div class="metric"><span class="metric-label">Unique accession numbers</span><span class="metric-value">${check.total}</span></div>
-        <div class="metric"><span class="metric-label">New (will be added)</span><span class="metric-value" style="color:var(--c-success)">${check.new}</span></div>
-        <div class="metric"><span class="metric-label">Already in database</span><span class="metric-value" style="color:var(--c-warning)">${check.existing}</span></div>`;
-
-    // Errors
-    const errEl = document.getElementById('precheckErrors');
-    if (check.errors && check.errors.length) {
-        errEl.innerHTML = `<div style="background:#fee2e2;border:1px solid #fecaca;border-radius:var(--radius);padding:10px 14px;color:#991b1b;font-size:.88em;">
-            <strong>\u26A0\uFE0F Warnings:</strong><ul style="margin:6px 0 0;padding-left:18px;">${check.errors.map(e => `<li>${e}</li>`).join('')}</ul></div>`;
-        errEl.style.display = 'block';
-    } else {
-        errEl.style.display = 'none';
-    }
-
-    // Start Analysis button state
-    const startBtn = document.getElementById('startAnalysisBtn');
-    if (check.new === 0 && check.total > 0) {
-        startBtn.disabled = true;
-        startBtn.textContent = '\u26D4 All records already exist';
-        startBtn.style.background = '#cbd5e1';
-    } else {
-        startBtn.disabled = false;
-        startBtn.textContent = `Start analysis (${check.new} new records)`;
-        startBtn.style.background = '';
-    }
-
-    panel.style.display = 'block';
-    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        select.addEventListener('change', () => {
+            if (!confirm('Changing format replaces all current column allocations. Continue?')) {select.value=selectedFormat; return;}
+            selectedFormat=select.value;
+            const format=check.formats.find(f => f.format_id===select.value);
+            columns.forEach(([header,allocation]) => {allocation.value=format?.mapping[header] || '';});
+            mappingManifest[index]=format ? {format_id:format.format_id} : {column_mapping:Object.fromEntries(columns.map(([h,a]) => [h,a.value]))};
+            mappingChanged();
+        });
+        section.append(table);
+        const exclusions=document.createElement('p'); exclusions.textContent='Excluded columns: '+(file.excluded.join(', ') || 'none'); section.append(exclusions);
+        container.append(section);
+    });
+    document.getElementById('precheckStats').textContent = `${check.total} distinct studies: ${check.new_complete} new complete; ${check.new_incomplete} incomplete (will be discarded); ${check.existing_enrichable} existing studies to enrich; ${check.existing_unchanged} unchanged. ${check.invalid_raw_rows} rows with invalid or missing anon_id.`;
+    const errors=document.getElementById('precheckErrors'); errors.replaceChildren();
+    check.errors.forEach(error => {const p=document.createElement('p');p.textContent=`File ${error.file+1}, row ${error.row}, ${error.field}: ${error.code}`;errors.append(p);});
+    (check.excluded_reasons || []).forEach(reason => {const p=document.createElement('p');p.textContent='Incomplete study missing: '+reason.join(', ');errors.append(p);});
+    if (check.disagreements.length) {const p=document.createElement('p');p.textContent=`${check.disagreements.length} stored-value disagreements; stored values will be preserved.`;errors.append(p);}
+    if (check.protected_enrichment.length) {const p=document.createElement('p');p.textContent='Existing processing inputs cannot be enriched because they affect derived results.';errors.append(p);}
+    errors.style.display=errors.childElementCount?'block':'none';
+    const start=document.getElementById('startAnalysisBtn'); start.disabled=check.blocked;
+    start.textContent=check.blocked?'Correct invalid input before confirming':`Confirm (${check.new_incomplete} incomplete discarded)`;
+    document.getElementById('recheckMappingsBtn').hidden=true;
+    panel.style.display='block'; panel.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
-function cancelPrecheck() {
-    document.getElementById('precheckPanel').style.display = 'none';
-}
-
-function proceedWithAnalysis() {
-    const lunit = document.getElementById('lunitFiles').files;
-    const gt    = document.getElementById('gtFiles').files;
-    document.getElementById('precheckPanel').style.display = 'none';
-    uploadFiles(lunit, gt, document.getElementById('supplementalSteps').checked);
-}
-
-// Wire up precheck buttons
-document.getElementById('startAnalysisBtn').addEventListener('click', proceedWithAnalysis);
-document.getElementById('cancelPrecheckBtn').addEventListener('click', cancelPrecheck);
-
-async function uploadFiles(lunit, gt, supp) {
-    const fd = new FormData();
-    for (const f of lunit) fd.append('lunit_files', f);
-    for (const f of gt)    fd.append('ground_truth_files', f);
-    fd.append('supplemental_steps', supp);
-
-    const btn = document.getElementById('submitBtn');
-    btn.disabled = true; btn.textContent = 'Uploading\u2026';
-
-    const sc = document.getElementById('statusContainer');
-    sc.className = 'status-container status-uploading'; sc.style.display = 'block';
-    document.getElementById('statusMessage').textContent = `Uploading ${lunit.length + gt.length} files\u2026${supp ? ' (detailed findings enabled)' : ''}`;
-    updateProgress(2, 'Uploading\u2026');
-
+function cancelPrecheck() { previewId=null; document.getElementById('precheckPanel').style.display='none'; }
+async function proceedWithAnalysis() {
+    if (!previewId) return;
+    const start=document.getElementById('startAnalysisBtn'); start.disabled=true;
+    const fd=new FormData();fd.append('preview_id',previewId);
     try {
-        const r = await fetch(`${API_BASE_URL}/analyze-multiple`, { method:'POST', body:fd, headers:{'X-CSRFToken':csrfToken} });
-        if (r.status === 409) {
-            const d = await r.json();
-            showError(d.error || 'A task is already running.');
-            return;
+        const r=await fetch(`${API_BASE_URL}/analyze-auto-sort`,{method:'POST',body:fd,headers:{'X-CSRFToken':csrfToken}});
+        const result=await r.json();
+        if (!r.ok || result.error) throw new Error(result.error || 'Submission failed.');
+        document.getElementById('precheckPanel').style.display='none';
+        if (!result.task_id) {
+            const status=document.getElementById('statusContainer');status.style.display='block';status.className='status-container status-completed';
+            document.getElementById('statusMessage').textContent=`Complete. ${result.counts.existing_enrichable} existing studies enriched; ${result.counts.new_incomplete} incomplete discarded. No analysis required.`;
+            previewId=null; return;
         }
-        if (!r.ok) throw new Error(`HTTP ${r.status} \u2014 ${await r.text()}`);
-        const d = await r.json();
-        currentTaskId = d.task_id;
-        lockFormForActiveTask();
-        startMonitoring();
-    } catch(e) { showError(`Upload failed: ${e.message}`); }
+        currentTaskId=result.task_id;lockFormForActiveTask();startMonitoring();
+    } catch(error) {showError(error.message);start.disabled=false;}
 }
+document.getElementById('startAnalysisBtn').addEventListener('click',proceedWithAnalysis);
+document.getElementById('cancelPrecheckBtn').addEventListener('click',cancelPrecheck);
+document.getElementById('recheckMappingsBtn').addEventListener('click',checkUpload);
+document.getElementById('supplementalSteps').addEventListener('change',mappingChanged);
 
 // ══════════ Status monitoring ══════════
 function stopTask() {
@@ -394,7 +384,7 @@ function showResults(res) {
     let errHtml = '';
     if (res.error) {
         errHtml = `<div style="background:#fee2e2;border:1px solid #fecaca;border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;color:#991b1b;font-size:.9em;">
-            <strong>\u26A0\uFE0F Errors:</strong><pre style="margin:6px 0 0;white-space:pre-wrap;font-size:.88em;">${res.error}</pre></div>`;
+            <strong>\u26A0\uFE0F Errors:</strong><pre style="margin:6px 0 0;white-space:pre-wrap;font-size:.88em;">${escapeHtml(res.error)}</pre></div>`;
     }
 
     const rc = document.getElementById('resultsContainer');
@@ -423,7 +413,7 @@ function showResults(res) {
 function showError(msg) {
     const sc = document.getElementById('statusContainer');
     sc.className = 'status-container status-error';
-    document.getElementById('statusMessage').innerHTML = `\u274C ${msg}`;
+    document.getElementById('statusMessage').textContent = `Error: ${msg}`;
     updateProgress(0, 'Error');
     document.getElementById('stopTaskBtn').style.display = 'none';
     unlockForm();

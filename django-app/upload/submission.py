@@ -43,7 +43,7 @@ def release_submission(token):
     SubmissionReservation.objects.filter(pk=1, token=token).update(token=None, task=None)
 
 
-def submit_files(files, supplemental_steps=False, *, endpoint="analyze-auto-sort", before_dispatch=None, track=None):
+def submit_files(files, supplemental_steps=False, *, endpoint="analyze-auto-sort", before_dispatch=None, track=None, canonical=None):
     from .views import get_api_url, get_api_headers, _start_background_worker
     token = reserve_submission()
     dispatched = False
@@ -51,8 +51,8 @@ def submit_files(files, supplemental_steps=False, *, endpoint="analyze-auto-sort
         if before_dispatch:
             before_dispatch()
         dispatched = True
-        response = requests.post(f"{get_api_url()}/{endpoint}", files=files,
-                                 data={"supplemental_steps": "true" if supplemental_steps else "false"},
+        kwargs = {'json': canonical} if canonical is not None else {'files': files, 'data': {'supplemental_steps': 'true' if supplemental_steps else 'false'}}
+        response = requests.post(f"{get_api_url()}/{endpoint}", **kwargs,
                                  headers=get_api_headers(), timeout=(10, 75))
         if response.status_code >= 500:
             raise SubmissionError("submission_outcome_unknown", 502, ambiguous=True)
@@ -66,7 +66,7 @@ def submit_files(files, supplemental_steps=False, *, endpoint="analyze-auto-sort
             SubmissionReservation.objects.filter(pk=1, token=token).update(task=task)
             if track:
                 track(task)
-        _start_background_worker(task_id)
+        transaction.on_commit(lambda: _start_background_worker(task_id))
         return result
     except SubmissionError as exc:
         if not exc.ambiguous:
@@ -91,7 +91,16 @@ def persist_result(task_id, result):
             raise SubmissionError("task_not_running", 409)
         # Write first so SQLite also acquires a write reservation before study reads.
         ProcessingTask.objects.filter(pk=task_id).update(status="saving")
-        counts = save_results_to_database(result, task_id, strict=hasattr(task, "apijob"))
+        from .models import UploadPreview
+        preview = UploadPreview.objects.select_for_update().filter(task=task).first()
+        if preview:
+            from .ingestion import commit_studies, public_counts
+            counts = commit_studies(preview, result.get('canonical_rows'))
+            preview.payload, preview.state = {}, 'complete'
+            preview.summary = public_counts(preview.summary)
+            preview.save(update_fields=['payload', 'state', 'summary'])
+        else:
+            counts = save_results_to_database(result, task_id, strict=True)
         task.status = "completed"
         task.completed_at = task.results_saved_at = timezone.now()
         task.progress_percent = 100
@@ -102,4 +111,14 @@ def persist_result(task_id, result):
         if result.get("false_negatives"):
             task.false_negatives_json = json.dumps(result["false_negatives"])
         task.save()
+        if preview:
+            transaction.on_commit(lambda: discard_remote(task_id))
         return counts
+
+
+def discard_remote(task_id):
+    from .views import get_api_url, get_api_headers
+    try:
+        requests.delete(f'{get_api_url()}/tasks/{task_id}', headers=get_api_headers(), timeout=(5,10))
+    except requests.RequestException:
+        pass  # shortcut: remote cleanup needs task administration on network failure; add durable retries if frequent.

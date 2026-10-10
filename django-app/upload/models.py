@@ -8,6 +8,8 @@ The primary key is the accession number. Before adding entries,
 the system checks if an accession number already exists.
 """
 
+import uuid
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -244,3 +246,42 @@ class SubmissionReservation(models.Model):
 
     class Meta:
         constraints = [models.CheckConstraint(condition=models.Q(id=1), name="upload_submission_singleton")]
+
+
+class FieldConfiguration(models.Model):
+    project = models.CharField(max_length=64)
+    field_id = models.CharField(max_length=64)
+    settings = models.JSONField(default=dict)
+    revision = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['project', 'field_id'], name='upload_field_project_unique')]
+
+
+class UploadFormat(models.Model):
+    project = models.CharField(max_length=64)
+    format_id = models.SlugField(max_length=64)
+    name = models.CharField(max_length=128)
+    headers = models.JSONField(default=list)
+    mapping = models.JSONField(default=dict)
+    rules = models.JSONField(default=dict)
+    role = models.CharField(max_length=32, default='source')
+    position = models.PositiveIntegerField(default=0)
+    enabled = models.BooleanField(default=True)
+    revision = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        ordering = ['position', 'format_id']
+        constraints = [models.UniqueConstraint(fields=['project', 'format_id'], name='upload_format_project_unique')]
+
+
+class UploadPreview(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    project = models.CharField(max_length=64)
+    digest = models.CharField(max_length=64)
+    payload = models.JSONField(default=dict)
+    summary = models.JSONField(default=dict)
+    expires_at = models.DateTimeField(db_index=True)
+    state = models.CharField(max_length=16, default='ready')
+    task = models.OneToOneField(ProcessingTask, null=True, on_delete=models.SET_NULL)

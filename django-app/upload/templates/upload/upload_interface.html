@@ -17,7 +17,7 @@
         <span id="apiStatus" class="api-pill checking">Checking API…</span>
         <span id="llmStatus" class="api-pill checking">Checking LLM…</span>
     </div>
-    <p class="page-subtitle">Upload Lunit CARPL and RIS Ground Truth files for automated analysis</p>
+    <p class="page-subtitle">Upload source files, map columns and review combined studies before analysis. Study identifier: anon_id.</p>
 
     <div class="card upload-card">
         <form id="uploadForm">
@@ -25,7 +25,7 @@
 
             <div class="form-group">
                 <label for="lunitFiles">CARPL Results Files</label>
-                <input type="file" id="lunitFiles" name="lunit_files" accept=".csv,.xlsx,.xls" multiple hidden>
+                <input type="file" id="lunitFiles" name="lunit_files" accept=".csv,.xlsx,.xls" multiple>
                 <div class="file-drop">
                     Select or drag and drop multiple CARPL files
                 </div>
@@ -35,7 +35,7 @@
 
             <div class="form-group">
                 <label for="gtFiles">RIS Report Files</label>
-                <input type="file" id="gtFiles" name="ground_truth_files" accept=".csv,.xlsx,.xls" multiple hidden>
+                <input type="file" id="gtFiles" name="ground_truth_files" accept=".csv,.xlsx,.xls" multiple>
                 <div class="file-drop">
                     Select or drag and drop multiple RIS files
                 </div>
@@ -63,6 +63,7 @@
             <div id="precheckStats" class="db-stats-box" style="margin-top:12px;"></div>
             <div id="precheckErrors" style="display:none;margin-top:10px;"></div>
             <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px;">
+                <button type="button" id="recheckMappingsBtn" class="btn btn-outline" hidden>Recheck mappings</button>
                 <button id="startAnalysisBtn" class="submit-btn">Start analysis</button>
                 <button id="cancelPrecheckBtn" class="btn btn-outline">Cancel</button>
             </div>
