@@ -73,3 +73,15 @@ Expect HTTP 200, then log in as `preview-admin` using the password set at startu
 Inspect `$env:TEMP/primer-prime-preview.py` before using it: the current helper sets a read-only URI for `django-app/db/db.sqlite3`. Its mocked identity does **not** guarantee synthetic report data. Do not use it with a PHI-bearing database; use the isolated full Django preview above for general test-server requests.
 
 After confirming this helper is appropriate and stopping only its verified listener, use the startup block with `$previewScript` set to that helper and distinct `primer-prime-preview.out.log` / `.err.log` files. Omit the password steps; this harness has no real login. Check HTTP 200 at `/report/overview/`, `/report/showcase/`, or `/layout/editor/showcase/`. Its editor drafts persist separately at `$env:TEMP/primer-preview-editor-drafts/`; retain them on restart. Read its supported routes before assuming upload, viewer, or API workflows work.
+
+## Load synthetic test data and Showcase
+
+After starting the full Django preview, run from the checkout root:
+
+```powershell
+python .agents/skills/primer-test-server/scripts/seed_preview.py
+```
+
+This creates 2,000 deterministic synthetic studies across two sites, with dates, ground truths, finding scores, and timing values. It publishes the packaged Overview and Showcase reports only into `$env:TEMP/primer-full-preview/reports/`. Existing rows and published reports are preserved; edited unpublished drafts require publication through the editor. Repeating the command does not duplicate the generated studies. The helper uses the fixed temporary databases, never the checkout database, and validates synthetic identifiers before inserting.
+
+Log in and open `/report/overview/` or `/report/showcase/`; the Showcase editor is `/layout/editor/showcase/`. No restart is required for newly inserted data or published layouts. This setup belongs to the full Django preview, not the older mocked HTTP harness. The generated population is demonstration data, not a clinical performance benchmark.
