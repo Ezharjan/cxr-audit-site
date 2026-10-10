@@ -63,7 +63,7 @@ Stop-Process -Id $verifiedPreviewProcessId -ErrorAction Stop
 Confirm no listener remains on 8766, then repeat startup with the same helper and storage. The full Django launcher has no autoreload, so Python changes require a restart. Allow up to 30 seconds for startup, checking at one-second intervals; finish early on a successful HTTP response or process exit. Do not retry indefinitely.
 
 ```powershell
-Invoke-WebRequest 'http://127.0.0.1:8766/accounts/login/' -UseBasicParsing | Select-Object StatusCode
+Invoke-WebRequest 'http://127.0.0.1:8766/login/' -UseBasicParsing | Select-Object StatusCode
 ```
 
 Expect HTTP 200, then log in as `preview-admin` using the password set at startup and visit `/report/`. A successful login page alone does not verify report data or external analysis. If startup fails, inspect `$env:TEMP/primer-full-preview.err.log` and `.out.log`, and check the listener owner again. Do not publish this development server or bind it to `0.0.0.0`.
