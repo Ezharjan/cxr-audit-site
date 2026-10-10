@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-14)
 Phase: 6 of 6 (remaining hipaa controls plan)
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-10-10 - Completed quick task 261010-0ju: Configurable Lunit thresholds per report card
+Last activity: 2026-10-10 - Completed quick task 261010-w7f: Document port 8766 test server project skill
 
 Progress: [----------] 0%
 
@@ -78,6 +78,7 @@ None yet.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 261010-w7f | Document port 8766 test server project skill | 2026-10-10 | ca638dd | [261010-w7f](./quick/261010-w7f-document-port-8766-synthetic-preview-sta/) |
 | 261010-0ju | Configurable Lunit thresholds per report table and graph | 2026-10-10 | 3dc74a5 | [261010-0ju](./quick/261010-0ju-add-per-card-configurable-lunit-finding-/) |
 | 260822-ww5 | Apply the approved PRIMER visual system and responsive navigation across all existing Django screens without changing copy or behavior | 2026-08-23 | 6d30d69 | [260822-ww5](./quick/260822-ww5-apply-the-approved-primer-visual-system-/) |
 | 260825-x95 | Polish PRIMER UI, remove decorative emoji, add dark mode, improve logout and responsive layouts | 2026-08-26 | 8ffc777 | [260825-x95](./quick/260825-x95-polish-primer-ui-remove-decorative-emoji/) |

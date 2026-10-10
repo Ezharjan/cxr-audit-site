@@ -30,7 +30,7 @@ Only stop a listener after confirming its executable and command line identify t
 The existing helper uses `agent_api.test_settings`, binds only `127.0.0.1:8766`, disables autoreload, migrates temporary databases, and creates or updates the `preview-admin` superuser. It takes the password from `PRIMER_PREVIEW_PASSWORD` and resets it each time it starts. Email stays in memory and the API target is localhost port 9; external analysis is unavailable.
 
 ```powershell
-$repoRoot = (Get-Location).Path
+$repoRoot = (Get-Location).ProviderPath
 $pythonExe = (Get-Command python -ErrorAction Stop).Source
 $previewScript = Join-Path $env:TEMP 'primer-full-preview.py'
 if (!(Test-Path -LiteralPath (Join-Path $repoRoot 'django-app/manage.py'))) { throw 'Run from the PRIMER checkout root.' }
