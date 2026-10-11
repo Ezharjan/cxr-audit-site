@@ -21,7 +21,10 @@ class UploadBrowserTests(StaticLiveServerTestCase):
                 page=context.new_page()
                 page.route('**/upload/api/check-*',lambda route:route.fulfill(json={'connected':True}))
                 page.goto(self.live_server_url+'/upload/')
-                page.locator('#sourceFiles').set_input_files([{'name':'synthetic<img onerror=window.injected=1>.csv','mimeType':'text/csv','buffer':b'anon_id,ABC\n1,12\n'}, {'name':'synthetic-ris.csv','mimeType':'text/csv','buffer':b'anon_id,WORKPLACE\n1,SYNTH-A\n'}])
+                self.assertTrue(page.locator('#sourceFiles').is_hidden())
+                with page.expect_file_chooser() as chooser:
+                    page.get_by_role('button', name='Select or drag and drop CARPL and RIS files together').click()
+                chooser.value.set_files([{'name':'synthetic<img onerror=window.injected=1>.csv','mimeType':'text/csv','buffer':b'anon_id,ABC\n1,12\n'}, {'name':'synthetic-ris.csv','mimeType':'text/csv','buffer':b'anon_id,WORKPLACE\n1,SYNTH-A\n'}])
                 page.locator('#submitBtn').click()
                 page.wait_for_selector('#mapping-0-1')
                 self.assertIn('1 distinct studies',page.locator('#precheckStats').inner_text())

@@ -228,3 +228,7 @@ Quick task 261011-1cj implemented the 261009-vmg handoff: supporting field/forma
 ### Unified upload selector (2026-10-11)
 
 | 261011-lr2 | Unified source selector and upload settings icon; 14 focused tests and browser verification passed | 2026-10-11 | See quick summary | [261011-lr2](./quick/261011-lr2-unify-upload-file-selector-and-use-uploa/) |
+
+### Custom upload picker restored (2026-10-11)
+
+| 261011-lxf | Hide native file control; retain styled accessible picker | 2026-10-11 | See quick summary | [261011-lxf](./quick/261011-lxf-restore-unified-upload-picker-styling-an/) |

@@ -25,10 +25,10 @@
 
             <div class="form-group">
                 <label for="sourceFiles">Source files (CARPL and RIS)</label>
-                <input type="file" id="sourceFiles" name="files" accept=".csv,.xlsx,.xls" multiple>
-                <div class="file-drop">
+                <input type="file" id="sourceFiles" name="files" accept=".csv,.xlsx,.xls" multiple hidden>
+                <button type="button" class="file-drop">
                     Select or drag and drop CARPL and RIS files together
-                </div>
+                </button>
                 <div id="sourceFilesSelected" class="file-selected"></div>
                 <div class="help-text">Select multiple CSV or Excel files; precheck detects each format from its columns.</div>
             </div>
