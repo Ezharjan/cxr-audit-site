@@ -79,7 +79,7 @@
             <details class="nav-category" open>
                 <summary class="nav-category-title">Admin</summary>
                 <a href="{% url 'agent_api:configuration' %}" class="nav-item{% if request.resolver_match.view_name == 'agent_api:configuration' %} active{% endif %}"{% if request.resolver_match.view_name == 'agent_api:configuration' %} aria-current="page"{% endif %}><svg class="nav-icon" aria-hidden="true"><use href="#icon-tasks"/></svg><span>API</span></a>
-                <a href="{% url 'upload:configuration' %}" class="nav-item"><svg class="nav-icon" aria-hidden="true"><use href="#icon-edit"/></svg><span>Upload settings</span></a>
+                <a href="{% url 'upload:configuration' %}" class="nav-item"><svg class="nav-icon" aria-hidden="true"><use href="#icon-upload"/></svg><span>Upload settings</span></a>
                 <a href="{% url 'upload:tasks_list' %}" class="nav-item {% block nav_tasks %}{% endblock %}"{% if request.resolver_match.view_name == 'upload:tasks_list' %} aria-current="page"{% endif %}>
                     <svg class="nav-icon" aria-hidden="true"><use href="#icon-tasks"/></svg><span>Tasks</span>
                 </a>

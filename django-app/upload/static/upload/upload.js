@@ -48,8 +48,7 @@ function lockFormForActiveTask() {
     btn.disabled = true;
     btn.textContent = 'Task in progress\u2026';
     // Disable file inputs
-    document.getElementById('lunitFiles').disabled = true;
-    document.getElementById('gtFiles').disabled = true;
+    document.getElementById('sourceFiles').disabled = true;
     document.getElementById('supplementalSteps').disabled = true;
 }
 
@@ -57,8 +56,7 @@ function unlockForm() {
     const btn = document.getElementById('submitBtn');
     btn.disabled = false;
     btn.textContent = 'Upload & check';
-    document.getElementById('lunitFiles').disabled = false;
-    document.getElementById('gtFiles').disabled = false;
+    document.getElementById('sourceFiles').disabled = false;
     document.getElementById('supplementalSteps').disabled = false;
 }
 
@@ -99,8 +97,7 @@ async function checkLlmConnection() {
 }
 
 // ══════════ File inputs ══════════
-document.getElementById('lunitFiles').addEventListener('change', e => handleFiles(e.target, 'lunitFilesSelected'));
-document.getElementById('gtFiles').addEventListener('change', e => handleFiles(e.target, 'gtFilesSelected'));
+document.getElementById('sourceFiles').addEventListener('change', e => handleFiles(e.target, 'sourceFilesSelected'));
 
 function handleFiles(input, displayId) {
     previewId = null; mappingManifest = null; uploadCheck = null;
@@ -160,12 +157,10 @@ function setupDragAndDrop(inputId, dropZone, displayId) {
     });
 }
 
-// Wire up both drop zones and click-to-upload
+// Wire up the shared drop zone and click-to-upload
 const dropZones = document.querySelectorAll('.file-drop');
-dropZones[0].addEventListener('click', () => document.getElementById('lunitFiles').click());
-dropZones[1].addEventListener('click', () => document.getElementById('gtFiles').click());
-setupDragAndDrop('lunitFiles', dropZones[0], 'lunitFilesSelected');
-setupDragAndDrop('gtFiles',    dropZones[1], 'gtFilesSelected');
+dropZones[0].addEventListener('click', () => document.getElementById('sourceFiles').click());
+setupDragAndDrop('sourceFiles', dropZones[0], 'sourceFilesSelected');
 
 // Inspect, map, preview, then confirm the exact private preview.
 document.getElementById('uploadForm').addEventListener('submit', async e => {
@@ -174,7 +169,7 @@ document.getElementById('uploadForm').addEventListener('submit', async e => {
 });
 
 async function checkUpload() {
-    const files = [...document.getElementById('lunitFiles').files, ...document.getElementById('gtFiles').files];
+    const files = [...document.getElementById('sourceFiles').files];
     if (!files.length) { alert('Select at least one source file.'); return; }
     const btn = document.getElementById('submitBtn');
     btn.disabled = true; btn.textContent = 'Checking files…';

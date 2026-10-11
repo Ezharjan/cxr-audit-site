@@ -24,23 +24,13 @@
             {% csrf_token %}
 
             <div class="form-group">
-                <label for="lunitFiles">CARPL Results Files</label>
-                <input type="file" id="lunitFiles" name="lunit_files" accept=".csv,.xlsx,.xls" multiple>
+                <label for="sourceFiles">Source files (CARPL and RIS)</label>
+                <input type="file" id="sourceFiles" name="files" accept=".csv,.xlsx,.xls" multiple>
                 <div class="file-drop">
-                    Select or drag and drop multiple CARPL files
+                    Select or drag and drop CARPL and RIS files together
                 </div>
-                <div id="lunitFilesSelected" class="file-selected"></div>
-                <div class="help-text">CSV or Excel; multiple-file selection supported</div>
-            </div>
-
-            <div class="form-group">
-                <label for="gtFiles">RIS Report Files</label>
-                <input type="file" id="gtFiles" name="ground_truth_files" accept=".csv,.xlsx,.xls" multiple>
-                <div class="file-drop">
-                    Select or drag and drop multiple RIS files
-                </div>
-                <div id="gtFilesSelected" class="file-selected"></div>
-                <div class="help-text">CSV or Excel; multiple-file selection supported</div>
+                <div id="sourceFilesSelected" class="file-selected"></div>
+                <div class="help-text">Select multiple CSV or Excel files; precheck detects each format from its columns.</div>
             </div>
 
             <div class="form-group">

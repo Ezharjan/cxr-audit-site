@@ -61,4 +61,5 @@ write('carpl-out-of-range.csv', carpl, [dict(source[0], pneumothorax=101)])
 assert len({r['accession_no'] for r in source}) == 6
 assert all(set(FINDINGS) <= set(r) and all(0 <= r[f] <= 100 for f in FINDINGS) for r in source)
 assert all('SYNTHETIC TEST ONLY' in r['text_report'] for r in source)
-print('Generated 9 synthetic upload fixtures; six distinct identifiers.')
+write('existing-annotations.csv', {'Accession Number': 'accession_no', 'Comments': 'comments'}, [dict(source[0], comments='Conflicting synthetic comment'), dict(source[1], comments='New synthetic comment')])
+print('Generated 10 synthetic upload fixtures; six distinct identifiers.')
