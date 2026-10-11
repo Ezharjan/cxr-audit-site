@@ -220,3 +220,4 @@ Quick task 261009-vmg complete (documentation only). Sol implementation pending:
 ### Upload handling execution (2026-10-11)
 
 Quick task 261011-1cj implemented the 261009-vmg handoff: supporting field/format/preview tables, shared strict UI/API ingestion, canonical processing and atomic persistence, protected generated outputs, report semantic snapshots and administration/rollout documentation. See [implementation summary](./quick/261009-vmg-write-sol-implementation-plan-for-config/IMPLEMENTATION-SUMMARY.md). Local synthetic verification completed; PostgreSQL/container/real inference deployment gates remain. Not deployed.
+`n### Synthetic upload verification (2026-10-11)`n`n| 261011-liu | Synthetic CARPL/RIS fixtures and browser verification | 2026-10-11 | See quick summary | [261011-liu](./quick/261011-liu-create-synthetic-carpl-ris-fixtures-and-/) |
