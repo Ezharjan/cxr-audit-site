@@ -232,3 +232,5 @@ Quick task 261011-1cj implemented the 261009-vmg handoff: supporting field/forma
 ### Custom upload picker restored (2026-10-11)
 
 | 261011-lxf | Hide native file control; retain styled accessible picker | 2026-10-11 | See quick summary | [261011-lxf](./quick/261011-lxf-restore-unified-upload-picker-styling-an/) |
+
+| 261011-m05 | Generic source file label and picker text | 2026-10-11 | See quick summary | [261011-m05](./quick/261011-m05-use-generic-source-file-labels-on-upload/) |
