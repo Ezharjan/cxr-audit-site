@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-14)
 Phase: 6 of 6 (remaining hipaa controls plan)
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-10-10 - Completed quick task 261010-wqj: Load preview test data and Showcase
+Last activity: 2026-10-12 - Completed quick task 261012-u5i: Koios retro upload research and implementation plan
 
 Progress: [----------] 0%
 
@@ -234,3 +234,8 @@ Quick task 261011-1cj implemented the 261009-vmg handoff: supporting field/forma
 | 261011-lxf | Hide native file control; retain styled accessible picker | 2026-10-11 | See quick summary | [261011-lxf](./quick/261011-lxf-restore-unified-upload-picker-styling-an/) |
 
 | 261011-m05 | Generic source file label and picker text | 2026-10-11 | See quick summary | [261011-m05](./quick/261011-m05-use-generic-source-file-labels-on-upload/) |
+
+### Koios retro upload implementation handoff (2026-10-12)
+
+| 261012-u5i | Source-grounded shared uploader /retro-upload and selective Koios extraction plan; documentation only | 2026-10-12 | See quick summary | [261012-u5i](./quick/261012-u5i-research-and-plan-koios-retro-upload-wit/) |
+
