@@ -3,6 +3,6 @@ status: complete
 ---
 # Research and planning summary
 
-Created IMPLEMENTATION-PLAN.md after reading shared ingestion/mapping/storage/task/UI/API/processor boundaries and external Koios source only. Koios has no production model/adapter here. The plan adds isolated Koios storage, shares upload controls, preserves PRIME, groups missing outputs for one thyroid extraction call and handles successful nulls separately from failures. User-confirmed llm_extract.py is the processing reference.
+Original source research covered shared upload/mapping/storage/task/UI/API/processor boundaries and external Koios source only. Updated the implementation handoff after the confirmed grilling session: extensible shared project architecture, PRIME implementation first, admin retro llm_grade mapping only, selective grade/supplemental processing, hard blocks for existing changes, and atomic new-record persistence. Koios remains an architectural example/future adapter.
 
-Verification: static source walkthrough and plan review; no datasets, tests, runtime services or application code changed. Implementation and deployment gates remain in the handoff.
+User-confirmed decisions are in 261012-u5i-CONTEXT.md. No application code, datasets or deployment changed. Verification: static source grounding and document consistency; application tests were not run. Existing-record enrichment and real Koios integration are explicit TODOs.

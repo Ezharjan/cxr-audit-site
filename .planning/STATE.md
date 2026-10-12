@@ -237,5 +237,4 @@ Quick task 261011-1cj implemented the 261009-vmg handoff: supporting field/forma
 
 ### Koios retro upload implementation handoff (2026-10-12)
 
-| 261012-u5i | Source-grounded shared uploader /retro-upload and selective Koios extraction plan; documentation only | 2026-10-12 | See quick summary | [261012-u5i](./quick/261012-u5i-research-and-plan-koios-retro-upload-wit/) |
-
+| 261012-u5i | Confirmed extensible PRIME-first uploader and retro-grade plan; Koios and existing enrichment deferred; documentation only | 2026-10-12 | See quick summary | [261012-u5i](./quick/261012-u5i-research-and-plan-koios-retro-upload-wit/) |
