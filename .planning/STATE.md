@@ -250,3 +250,7 @@ Quick task 261011-1cj implemented the 261009-vmg handoff: supporting field/forma
 ### Standard export compatibility restored (2026-10-19)
 
 | 261019-0ov | Default CARPL missing markers and RIS dates restored; 56 tests passed; supplied exports produce 54 valid studies under default settings | 2026-10-19 | See summary | [261019-0ov](./quick/261019-0ov-restore-default-carpl-ris-export-compati/) |
+
+### API canonical image packaging (2026-10-19)
+
+| 261019-147 | Include canonical_processing.py and build-time import check; 6 tests passed; Docker deployment pending | 2026-10-19 | See summary | [261019-147](./quick/261019-147-fix-canonical-processing-module-missing-/) |

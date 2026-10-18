@@ -41,6 +41,9 @@ COPY --from=builder /install /usr/local
 COPY cxr_audit/ cxr_audit/
 COPY class_process_carpl.py .
 COPY combined_server.py .
+COPY canonical_processing.py .
+# Fail the build if the upload pipeline cannot load in the runtime image.
+RUN python -c "from canonical_processing import validate_rows, process"
 COPY open_protected_xlsx.py .
 
 # Copy JSON configuration files
