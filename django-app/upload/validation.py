@@ -1,5 +1,6 @@
 """Shared validation/merge/classification. No processor calls or study writes."""
 import math
+from collections import Counter
 import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -124,6 +125,9 @@ def normalize(files, manifest, formats, catalogue, *, api=False):
         raise ValueError('manifest_file_count_mismatch')
     combined, provenance, details, errors = {}, {}, [], []
     invalid_ids = 0
+    invalid_rows = 0
+    invalid_studies = set()
+    warning_counts = Counter()
     for index, file in enumerate(files):
         layout = choose_layout(file, manifest[index] if manifest is not None else None, formats, catalogue, api=api)
         details.append(dict(index=index, name=file['name'], rows=len(file['rows']), headers=file['headers'],
@@ -131,6 +135,7 @@ def normalize(files, manifest, formats, catalogue, *, api=False):
         for row_number, values in enumerate(file['rows'], 2):
             row = {}
             invalid = False
+            invalid_id = False
             for header, raw in zip(file['headers'], values):
                 destination = layout['mapping'][header]
                 if not destination:
@@ -139,31 +144,45 @@ def normalize(files, manifest, formats, catalogue, *, api=False):
                     row[destination] = typed_value(destination, raw, catalogue[destination], layout['rules'].get(header))
                 except (ValueError, TypeError, OverflowError):
                     invalid = True
+                    warning_counts[(destination, 'invalid_value')] += 1
                     if destination == 'accession_no':
                         invalid_ids += 1
+                        invalid_id = True
                     if len(errors) < 100:
                         errors.append(dict(file=index, row=row_number, field=destination, code='invalid_value'))
             if not any(v is not None for v in row.values()) and not invalid:
                 continue
             key = row.get('accession_no')
             if key is None:
-                if not any(e.get('file') == index and e.get('row') == row_number and e.get('field') == 'accession_no' for e in errors):
+                if not invalid_id:
                     invalid_ids += 1
+                    warning_counts[('accession_no', 'missing_identifier')] += 1
                     if len(errors) < 100:
                         errors.append(dict(file=index, row=row_number, field='accession_no', code='missing_identifier'))
+                invalid_rows += 1
                 continue
+            if invalid:
+                invalid_rows += 1
+                invalid_studies.add(str(key))
             target = combined.setdefault(str(key), {'accession_no': key})
             sources = provenance.setdefault(str(key), {})
+            conflict = False
             for name, v in row.items():
                 if v is None:
                     continue
                 if name in target and target[name] != v:
+                    conflict = True
+                    invalid_studies.add(str(key))
+                    warning_counts[(name, 'conflicting_uploaded_values')] += 1
                     if len(errors) < 100:
                         errors.append(dict(file=index, row=row_number, field=name, code='conflicting_uploaded_values', previous=sources.get(name)))
                 else:
                     target[name] = v
                     sources.setdefault(name, dict(file=index, row=row_number))
-    return dict(rows=combined, provenance=provenance, files=details, errors=errors, invalid_raw_rows=invalid_ids)
+            if conflict and not invalid:
+                invalid_rows += 1
+    return dict(invalid_studies=invalid_studies, invalid_rows=invalid_rows,
+                warning_counts=[dict(field=field, code=code, count=count) for (field, code), count in warning_counts.items()], rows=combined, provenance=provenance, files=details, errors=errors, invalid_raw_rows=invalid_ids)
 
 
 def serialize(value):
@@ -173,7 +192,10 @@ def serialize(value):
 def classify(normalized, existing):
     new, excluded, enrichment, baseline, disagreements, protected = {}, {}, {}, {}, [], []
     unchanged = 0
+    invalid_studies = normalized.get('invalid_studies', set())
     for key, row in normalized['rows'].items():
+        if key in invalid_studies:
+            continue
         stored = existing.get(key)
         if stored is None:
             absent = sorted(f for f in REQUIRED if missing(row.get(f)))
@@ -202,9 +224,11 @@ def classify(normalized, existing):
     summary = dict(total=len(normalized['rows']), new=len(new), new_complete=len(new),
                    new_incomplete=len(excluded), existing=len(existing), existing_enrichable=len(enrichment),
                    existing_unchanged=unchanged, invalid_raw_rows=normalized['invalid_raw_rows'],
+                   invalid_studies=len(invalid_studies), invalid_rows=normalized.get('invalid_rows', 0),
+                   warnings=normalized.get('warning_counts', []),
                    errors=normalized['errors'], files=normalized['files'],
                    excluded_reasons=list(excluded.values())[:100], disagreements=disagreements,
-                   protected_enrichment=protected, blocked=bool(normalized['errors']))
+                   protected_enrichment=protected, blocked=False)
     return dict(new=new, enrichment=enrichment, baseline=baseline, excluded=excluded, summary=summary)
 
 

@@ -242,3 +242,7 @@ Quick task 261011-1cj implemented the 261009-vmg handoff: supporting field/forma
 ### Dedicated parser service (2026-10-18)
 
 | 261018-wlc | Docker-isolated Unix-socket upload parser; visible errors; synthetic upload/API and Linux service checks passed; Docker/PVE smoke checks pending | 2026-10-18 | See quick summary | [261018-wlc](./quick/261018-wlc-dedicated-isolated-docker-parser-service/) |
+
+### Partial upload acceptance (2026-10-19)
+
+| 261019-0kf | Process valid studies and summarize skipped input; 53 synthetic tests passed; RIS date-format configuration still required for supplied files | 2026-10-19 | See summary | [261019-0kf](./quick/261019-0kf-process-valid-upload-studies-and-summari/) |

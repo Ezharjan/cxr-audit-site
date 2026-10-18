@@ -60,17 +60,18 @@ class ValidationTests(TestCase):
         self.assertEqual(result['summary']['new_complete'],1)
         self.assertFalse(result['summary']['blocked'])
 
-    def test_incomplete_excluded_but_malformed_values_still_block(self):
+    def test_incomplete_and_malformed_studies_are_skipped(self):
         result=classify(self.normalize([{'anon_id':'1','patient_age':'12'}]),{})
         self.assertEqual(result['summary']['new_incomplete'],1)
         self.assertFalse(result['summary']['blocked'])
         bad=classify(self.normalize([{'anon_id':'1','patient_age':'not-an-age'}]),{})
-        self.assertTrue(bad['summary']['blocked'])
-        self.assertEqual(bad['summary']['new_incomplete'],1)
+        self.assertFalse(bad['summary']['blocked'])
+        self.assertEqual(bad['summary']['invalid_studies'],1)
+        self.assertEqual(bad['summary']['new_incomplete'],0)
 
     def test_missing_id_is_blocking_separate_raw_row_count(self):
         result=classify(self.normalize([{'anon_id':'','patient_age':'12'}]),{})
-        self.assertTrue(result['summary']['blocked']);self.assertEqual(result['summary']['invalid_raw_rows'],1)
+        self.assertFalse(result['summary']['blocked']);self.assertEqual(result['summary']['invalid_raw_rows'],1)
         self.assertEqual(result['summary']['total'],0)
 
     def test_blank_identical_merge_and_conflict_reject(self):
@@ -79,6 +80,25 @@ class ValidationTests(TestCase):
         result=self.normalize([{'anon_id':'1','patient_age':'12'},{'anon_id':'1','patient_age':'13'}])
         self.assertEqual(result['errors'][0]['code'],'conflicting_uploaded_values')
         self.assertEqual(result['errors'][0]['previous']['row'],2)
+
+    def test_valid_studies_survive_invalid_rows_and_conflicts(self):
+        rows=[source(1),source(2,atelectasis='-'),source(3),source(3,workplace='OTHER'),source(4)]
+        result=classify(self.normalize(rows),{})
+        self.assertEqual(set(result['new']), {'1','4'})
+        self.assertEqual(result['summary']['invalid_studies'],2)
+        self.assertEqual(result['summary']['invalid_rows'],2)
+        self.assertFalse(result['summary']['blocked'])
+
+    def test_invalid_counts_are_not_truncated_to_diagnostic_sample(self):
+        rows=[source(index+1,atelectasis='-') for index in range(130)]
+        rows += [source(500,accession_no='bad')]
+        result=classify(self.normalize(rows),{})
+        self.assertEqual(result['summary']['invalid_raw_rows'],1)
+        self.assertEqual(result['summary']['invalid_rows'],131)
+        self.assertEqual(result['summary']['invalid_studies'],130)
+        self.assertEqual(sum(w['count'] for w in result['summary']['warnings']),131)
+        self.assertEqual(len(result['summary']['errors']),100)
+        self.assertEqual(result['new'],{})
 
     def test_alias_ambiguity_exclusion_and_protected_destinations(self):
         for destination in GENERATED:
@@ -271,7 +291,8 @@ class APIIngestionTests(TestCase):
     def test_invalid_values_conflicts_and_incomplete_terminal_response(self,post):
         mapping={n:n for n in source()}
         response=self.post([{'column_mapping':mapping}],[csv_file([source(atelectasis='bad')])])
-        self.assertEqual(response.status_code,400);self.assertTrue(response.json()['counts']['blocked'])
+        self.assertEqual(response.status_code,200);self.assertFalse(response.json()['counts']['blocked'])
+        self.assertEqual(response.json()['counts']['invalid_studies'],1)
         response=self.post([{'column_mapping':{'accession_no':'accession_no'}}],[csv_file([{'accession_no':1}])],key='incomplete')
         self.assertEqual(response.status_code,200);self.assertEqual(response.json()['status'],'completed');self.assertEqual(response.json()['counts']['new_incomplete'],1)
         self.assertNotIn('job_id',response.json());post.assert_not_called()

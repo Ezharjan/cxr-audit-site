@@ -239,15 +239,20 @@ function showPrecheckPanel(check) {
         const exclusions=document.createElement('p'); exclusions.textContent='Excluded columns: '+(file.excluded.join(', ') || 'none'); section.append(exclusions);
         container.append(section);
     });
-    document.getElementById('precheckStats').textContent = `${check.total} distinct studies: ${check.new_complete} new complete; ${check.new_incomplete} incomplete (will be discarded); ${check.existing_enrichable} existing studies to enrich; ${check.existing_unchanged} unchanged. ${check.invalid_raw_rows} rows with invalid or missing anon_id.`;
+    document.getElementById('precheckStats').textContent = `${check.new_complete} valid studies ready for analysis; ${check.existing_enrichable} existing studies ready for enrichment. Skipping ${check.new_incomplete} incomplete studies, ${check.invalid_studies || 0} studies with invalid or conflicting values, and ${check.invalid_raw_rows} rows with invalid or missing anon_id. ${check.existing_unchanged} existing studies unchanged.`;
     const errors=document.getElementById('precheckErrors'); errors.replaceChildren();
-    check.errors.forEach(error => {const p=document.createElement('p');p.textContent=`File ${error.file+1}, row ${error.row}, ${error.field}: ${error.code}`;errors.append(p);});
-    (check.excluded_reasons || []).forEach(reason => {const p=document.createElement('p');p.textContent='Incomplete study missing: '+reason.join(', ');errors.append(p);});
+    (check.warnings || []).forEach(warning => {
+        const p=document.createElement('p');
+        const label=warning.field==='accession_no'?'anon_id':(check.fields[warning.field]?.label || warning.field);
+        const reason=warning.code==='missing_identifier'?'missing identifier':warning.code==='conflicting_uploaded_values'?'conflicting values':check.fields[warning.field]?.storage_type==='DateTimeField'?'invalid date/time values':'invalid values';
+        p.textContent=`${label}: ${warning.count} ${reason}; affected studies will be skipped.`;
+        errors.append(p);
+    });
     if (check.disagreements.length) {const p=document.createElement('p');p.textContent=`${check.disagreements.length} stored-value disagreements; stored values will be preserved.`;errors.append(p);}
     if (check.protected_enrichment.length) {const p=document.createElement('p');p.textContent='Existing processing inputs cannot be enriched because they affect derived results.';errors.append(p);}
     errors.style.display=errors.childElementCount?'block':'none';
     const start=document.getElementById('startAnalysisBtn'); start.disabled=check.blocked;
-    start.textContent=check.blocked?'Correct invalid input before confirming':`Confirm (${check.new_incomplete} incomplete discarded)`;
+    start.textContent=check.blocked?'Check file mappings':`Process ${check.new_complete} valid studies${check.existing_enrichable ? ` and enrich ${check.existing_enrichable}` : ''}`;
     document.getElementById('recheckMappingsBtn').hidden=true;
     panel.style.display='block'; panel.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
