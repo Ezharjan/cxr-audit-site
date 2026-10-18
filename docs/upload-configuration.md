@@ -65,3 +65,9 @@ Reference behavior: [Django atomic transactions](https://docs.djangoproject.com/
 ## Partial acceptance (2026-10-19)
 
 Precheck processes valid complete studies while skipping invalid and incomplete studies. Any invalid mapped value or conflicting uploaded value excludes that study across all its source rows; it cannot be reconstructed from a partially invalid record. Rows with missing/invalid identifiers are skipped separately. Invalid-source-row and invalid-study counts are distinct, and aggregate field warning counts are not truncated by the 100-item diagnostic sample limit. Structural problems (file limits, unreadable files, invalid/protected mappings) still reject the request. The UI shows valid study counts and concise skip reasons rather than hundreds of individual errors. UI and routine API share this behavior. Date parsing rules still apply: presence of all required fields alone does not make an invalid timestamp acceptable.
+
+## Standard CARPL/RIS defaults (2026-10-19)
+
+Standard score headers (for example `Atelectasis`) recognize `-` as missing, never as a zero score. Standard mapped datetime headers use the `source-export` parser: ISO timestamps retain their offsets; RIS slash dates with AM/PM use month/day/year and a 12-hour clock; slash dates without AM/PM use day/month/year and a 24-hour clock. Naive timestamps use the existing Asia/Singapore default timezone, subject to explicit overrides. Invalid dates are not silently replaced with missing values.
+
+These field rules apply even when the complete header set differs from an illustrative saved format, and persist when the UI resubmits explicit column mappings. Saved format rules override the defaults, including explicit ISO-only parsing or an empty missing-sentinel list. Named API formats still require exact header signatures. No saved configuration or study data is rewritten, and no migration/reseeding is necessary. Rebuild/recreate Django to activate this change.

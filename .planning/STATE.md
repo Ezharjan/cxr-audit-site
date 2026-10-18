@@ -246,3 +246,7 @@ Quick task 261011-1cj implemented the 261009-vmg handoff: supporting field/forma
 ### Partial upload acceptance (2026-10-19)
 
 | 261019-0kf | Process valid studies and summarize skipped input; 53 synthetic tests passed; RIS date-format configuration still required for supplied files | 2026-10-19 | See summary | [261019-0kf](./quick/261019-0kf-process-valid-upload-studies-and-summari/) |
+
+### Standard export compatibility restored (2026-10-19)
+
+| 261019-0ov | Default CARPL missing markers and RIS dates restored; 56 tests passed; supplied exports produce 54 valid studies under default settings | 2026-10-19 | See summary | [261019-0ov](./quick/261019-0ov-restore-default-carpl-ris-export-compati/) |

@@ -87,7 +87,7 @@ def validate_format(headers, mapping, rules, role='source'):
         translations = rule.get('values', {})
         if not isinstance(translations, dict) or len(translations) > 128 or any(not isinstance(k, str) or not isinstance(v, (str, int, float, bool)) or len(str(k)) > 128 or len(str(v)) > 128 for k, v in translations.items()):
             raise ValueError('invalid_value_map')
-        if rule.get('date_format', 'iso') not in ('iso', '%d/%m/%Y %H:%M:%S', '%d/%m/%Y %H:%M', '%Y-%m-%d', '%d/%m/%Y'):
+        if rule.get('date_format', 'iso') not in ('iso', 'source-export', '%d/%m/%Y %H:%M:%S', '%d/%m/%Y %H:%M', '%Y-%m-%d', '%d/%m/%Y'):
             raise ValueError('unsupported_date_format')
         from zoneinfo import ZoneInfo
         ZoneInfo(rule.get('timezone', 'Asia/Singapore'))

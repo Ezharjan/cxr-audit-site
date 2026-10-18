@@ -100,6 +100,44 @@ class ValidationTests(TestCase):
         self.assertEqual(len(result['summary']['errors']),100)
         self.assertEqual(result['new'],{})
 
+    def test_standard_export_dates_and_missing_scores(self):
+        from .validation import choose_layout, typed_value
+        headers=['ACCESSION_NO','PROCEDURE_START_DATE','PROCEDURE_DATE','AI_FLAG_RECEIVED_DATE']
+        layout=choose_layout({'headers':headers},None,[],self.catalogue)
+        for token, expected in [('9/3/2026 1:25 PM','2026-09-03T13:25:00+08:00'),
+                                ('03/09/2026 13:25','2026-09-03T13:25:00+08:00'),
+                                ('9/3/2026 12:00 AM','2026-09-03T00:00:00+08:00'),
+                                ('2026-09-03T13:25:00+08:00','2026-09-03T13:25:00+08:00')]:
+            with self.subTest(token=token):
+                self.assertEqual(typed_value('procedure_start_date',token,self.catalogue['procedure_start_date'],layout['rules']['PROCEDURE_START_DATE']),expected)
+        with self.assertRaises(ValueError):
+            typed_value('procedure_start_date','not a date',self.catalogue['procedure_start_date'],layout['rules']['PROCEDURE_START_DATE'])
+        headers=['Accession Number','Atelectasis']
+        layout=choose_layout({'headers':headers},None,[],self.catalogue)
+        self.assertIsNone(typed_value('atelectasis','-',self.catalogue['atelectasis'],layout['rules']['Atelectasis']))
+        self.assertEqual(typed_value('atelectasis','0',self.catalogue['atelectasis'],layout['rules']['Atelectasis']),0)
+
+    def test_export_defaults_survive_recheck_and_respect_explicit_rules(self):
+        from .validation import choose_layout
+        file={'headers':['ACCESSION_NO','PROCEDURE_START_DATE']}
+        entry={'column_mapping':{'ACCESSION_NO':'accession_no','PROCEDURE_START_DATE':'procedure_start_date'}}
+        self.assertEqual(choose_layout(file,entry,[],self.catalogue)['rules']['PROCEDURE_START_DATE']['date_format'],'source-export')
+        formats=[dict(format_id='custom',revision=1,headers=file['headers'],mapping=entry['column_mapping'],rules={'PROCEDURE_START_DATE':{'date_format':'iso'}})]
+        self.assertEqual(choose_layout(file,None,formats,self.catalogue)['rules']['PROCEDURE_START_DATE']['date_format'],'iso')
+        with self.assertRaises(ValueError):
+            choose_layout({'headers':['ACCESSION_NO']},{'format_id':'custom'},formats,self.catalogue,api=True)
+
+    def test_standard_exports_merge_with_only_complete_studies_ready(self):
+        files=[dict(name='synthetic-carpl.csv',headers=['Accession Number',*[f.replace('_',' ').title() for f in FINDINGS]],
+                    rows=[['1',*[0]*10],['2',*['-']*10]]),
+               dict(name='synthetic-ris.csv',headers=['ACCESSION_NO','TEXT_REPORT','WORKPLACE','PROCEDURE_DATE'],
+                    rows=[['1','Synthetic report','SYN','9/3/2026 1:25 PM'],['2','Synthetic report','SYN','03/09/2026 13:25']])]
+        result=classify(normalize(files,None,[],self.catalogue),{})
+        self.assertEqual(set(result['new']),{'1'})
+        self.assertEqual(result['summary']['new_incomplete'],1)
+        self.assertEqual(result['summary']['invalid_studies'],0)
+        self.assertEqual(result['summary']['warnings'],[])
+
     def test_alias_ambiguity_exclusion_and_protected_destinations(self):
         for destination in GENERATED:
             with self.subTest(destination=destination), self.assertRaises(ValueError):

@@ -22,6 +22,34 @@ def missing(value):
     return value is None or (isinstance(value, str) and not value.strip())
 
 
+def export_datetime(value):
+    # Standard RIS exports mix US 12-hour Excel dates and day-first 24-hour dates.
+    try:
+        return datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError:
+        pass
+    formats = ('%m/%d/%Y %I:%M:%S %p', '%m/%d/%Y %I:%M %p') if value.upper().endswith(('AM', 'PM')) else ('%d/%m/%Y %H:%M:%S', '%d/%m/%Y %H:%M', '%d/%m/%Y')
+    for fmt in formats:
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            pass
+    raise ValueError('invalid_datetime')
+
+
+def export_rules(headers, mapping):
+    rules = {}
+    for header in headers:
+        field_id = mapping.get(header)
+        if field_id in FINDINGS + ('abnormal', 'tuberculosis') and header == field_id.replace('_', ' ').title():
+            rules[header] = {'missing': ['-']}
+        elif field_id in FIELDS and isinstance(FIELDS[field_id], models.DateTimeField):
+            from .contract import ALIASES
+            if header in ALIASES.get(field_id, []):
+                rules[header] = {'date_format': 'source-export'}
+    return rules
+
+
 def typed_value(field_id, value, settings, rule=None):
     rule = rule or {}
     if missing(value) or str(value) in rule.get('missing', []):
@@ -34,7 +62,7 @@ def typed_value(field_id, value, settings, rule=None):
         if not isinstance(value, str):
             raise ValueError('invalid_datetime')
         fmt = rule.get('date_format', 'iso')
-        result = datetime.fromisoformat(value.replace('Z', '+00:00')) if fmt == 'iso' else datetime.strptime(value, fmt)
+        result = export_datetime(value.strip()) if fmt == 'source-export' else datetime.fromisoformat(value.replace('Z', '+00:00')) if fmt == 'iso' else datetime.strptime(value, fmt)
         if result.tzinfo is None:
             zone = ZoneInfo(rule.get('timezone', 'Asia/Singapore'))
             naive = result
@@ -115,6 +143,8 @@ def choose_layout(file, entry, formats, catalogue, *, api=False):
                 choices = [name for name, s in catalogue.items() if s['upload_allowed'] and header in s['aliases']]
                 mapping[header] = choices[0] if len(choices) == 1 else ''
     mapping = validate_mapping(headers, mapping)
+    defaults = export_rules(headers, mapping)
+    rules = {h: {**defaults.get(h, {}), **rules.get(h, {})} for h in set(defaults) | set(rules)}
     validate_format(headers, mapping, rules)
     return dict(mapping=mapping, rules=rules, format_id=selected['format_id'] if selected else None,
                 revision=selected['revision'] if selected else None)
