@@ -408,6 +408,7 @@ function showResults(res) {
 function showError(msg) {
     const sc = document.getElementById('statusContainer');
     sc.className = 'status-container status-error';
+    sc.style.display = 'block';
     document.getElementById('statusMessage').textContent = `Error: ${msg}`;
     updateProgress(0, 'Error');
     document.getElementById('stopTaskBtn').style.display = 'none';

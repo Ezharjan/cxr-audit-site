@@ -238,3 +238,7 @@ Quick task 261011-1cj implemented the 261009-vmg handoff: supporting field/forma
 ### Koios retro upload implementation handoff (2026-10-12)
 
 | 261012-u5i | Confirmed extensible PRIME-first uploader and retro-grade plan; Koios and existing enrichment deferred; documentation only | 2026-10-12 | See quick summary | [261012-u5i](./quick/261012-u5i-research-and-plan-koios-retro-upload-wit/) |
+
+### Dedicated parser service (2026-10-18)
+
+| 261018-wlc | Docker-isolated Unix-socket upload parser; visible errors; synthetic upload/API and Linux service checks passed; Docker/PVE smoke checks pending | 2026-10-18 | See quick summary | [261018-wlc](./quick/261018-wlc-dedicated-isolated-docker-parser-service/) |

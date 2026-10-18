@@ -1,6 +1,6 @@
 # ================================
 # 🫁 PRIMER-LLM — Docker Compose
-# Three services: nginx (HTTPS), django (Gunicorn), api (FastAPI)
+# Services: nginx, django, api, parser and postgres
 # ================================
 
 name: cxr-audit-site
@@ -47,6 +47,7 @@ services:
       - DJANGO_SETTINGS_MODULE=lunit_audit.settings
       - CXR_API_IP=api
       - CXR_API_PORT=1221
+      - PARSER_SOCKET_PATH=/run/primer-parser/parser.sock
       # Set DATABASE_ENGINE=postgres and AUDIT_DATABASE_ENGINE=postgres in .env
       # to use the postgres service below. SQLite remains the default otherwise.
       - DATABASE_HOST=${DATABASE_HOST:-postgres}
@@ -56,7 +57,10 @@ services:
       - django-media:/app/media
       - django-staticfiles:/app/staticfiles
       - django-audit-artifacts:/app/audit_artifacts
+      - parser-socket:/run/primer-parser:ro
     depends_on:
+      parser:
+        condition: service_healthy
       api:
         condition: service_healthy
       postgres:
@@ -83,6 +87,42 @@ services:
       - primer-app
       - primer-data
       - primer-egress
+
+  # No network interface: Django connects over a private Unix socket only.
+  parser:
+    build:
+      context: ./django-app
+      dockerfile: parser_service/Dockerfile
+    container_name: primer-parser
+    user: "1000:1000"
+    init: true
+    network_mode: none
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - XLSX_DECRYPT_PASSWORD=${XLSX_DECRYPT_PASSWORD:-}
+    volumes:
+      - parser-socket:/run/primer-parser
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=384m,mode=0700,uid=1000,gid=1000
+    mem_limit: 1g
+    cpus: "1.0"
+    pids_limit: 32
+    ulimits:
+      core: 0
+      nofile:
+        soft: 64
+        hard: 64
+    healthcheck:
+      test: ["CMD", "python", "/opt/parser/healthcheck.py"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
 
   # ── PostgreSQL database (optional via DATABASE_ENGINE=postgres) ─────
   postgres:
@@ -176,6 +216,7 @@ networks:
 
 # ── Persistent Volumes ────────────────────────────────────
 volumes:
+  parser-socket:
   django-db:
   django-media:
   django-staticfiles:

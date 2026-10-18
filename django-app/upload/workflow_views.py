@@ -9,6 +9,7 @@ from .ingestion import inspect, create_preview, confirm, formats
 from .configuration import field_catalog
 from .models import UploadPreview
 from .submission import SubmissionError
+from .parser_client import ParserUnavailable
 
 
 def unique_object(pairs):
@@ -50,6 +51,8 @@ def precheck(request):
             body['preview_id'] = str(preview.pk)
         record(request, 'upload_preview', project='prime', count=body['total'], blocked=body['blocked'])
         return JsonResponse(body)
+    except ParserUnavailable:
+        return JsonResponse({'error': 'Upload parser unavailable. Please retry or contact your administrator.'}, status=503)
     except SubmissionError as exc:
         return JsonResponse({'error': exc.code}, status=exc.status)
     except (ValueError, TypeError, KeyError, ValidationError):

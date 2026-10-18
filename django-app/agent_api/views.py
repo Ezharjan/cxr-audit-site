@@ -16,6 +16,7 @@ from django.urls import reverse
 from report_v2 import data
 from report_v2.definitions.repository import validate_definition_id, InvalidDefinitionIdError
 from upload.submission import SubmissionError, submit_files
+from upload.parser_client import ParserUnavailable
 
 from .audit import record
 from .auth import APIError, api_endpoint, authenticate
@@ -81,6 +82,8 @@ def jobs(request, project):
         result = confirm(preview, before_dispatch=before_dispatch, track=track)
         if job is None:
             return finish(entry, {'status': 'completed', 'counts': public_counts(counts)}, 200)
+    except ParserUnavailable:
+        return finish(entry, {'error': {'code': 'parser_unavailable', 'message': 'Upload parser unavailable. Please retry or contact your administrator.'}}, 503)
     except SubmissionError as exc:
         if exc.ambiguous:
             uncertain(entry)

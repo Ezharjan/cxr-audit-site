@@ -62,6 +62,15 @@ class APITests(TestCase):
         self.assertEqual(result.status_code, 200, result.content[:200])
         return result.json()["version"]
 
+    def test_parser_unavailable_returns_safe_503(self):
+        from upload.parser_client import ParserUnavailable
+        with patch('upload.ingestion.inspect', side_effect=ParserUnavailable()):
+            response = self.upload(value='parser-unavailable')
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()['error']['code'], 'parser_unavailable')
+        self.assertFalse(APIJob.objects.exists())
+        self.assertEqual(self.upload(value='parser-unavailable').status_code, 503)
+
     def test_all_endpoints_disabled_and_session_is_not_api_auth(self):
         routes = [("post", "/api/prime/jobs"), ("get", f"/api/prime/jobs/{uuid.uuid4()}"),
                   ("get", "/api/prime/reports"), ("get", "/api/prime/reports/t13report/pdf"),

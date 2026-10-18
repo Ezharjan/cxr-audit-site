@@ -59,8 +59,10 @@ RUN mkdir -p /app/db /app/media /app/staticfiles /app/audit_artifacts
 # Create non-root user and grant ownership of writable directories.
 # A writable home is provided because `su` sets HOME=/home/appuser from
 # /etc/passwd; gunicorn's control server writes there on startup.
-RUN adduser --disabled-password --no-create-home appuser && \
+RUN addgroup --gid 1000 appuser && \
+    adduser --uid 1000 --gid 1000 --disabled-password --no-create-home appuser && \
     mkdir -p /home/appuser && \
+    install -d -m 0700 -o appuser -g appuser /run/primer-parser && \
     chown -R appuser:appuser /app/db /app/media /app/staticfiles /app/audit_artifacts /home/appuser
 
 # Copy entrypoint
