@@ -20,6 +20,11 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Explicit opt-in local development profile for a single workstation (for
+# example native Windows without Docker). It never activates implicitly; see
+# WINDOWS_LOCAL.md and lunit_audit/checks.py for the guards it enables.
+PRIMER_LOCAL_DEV = os.environ.get("PRIMER_LOCAL_DEV", "False").lower() in ("true", "1", "yes")
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -204,7 +209,7 @@ STATICFILES_DIRS = [
 ]
 
 # Collected static files destination (used by collectstatic + WhiteNoise)
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT = Path(os.environ.get("DJANGO_STATIC_ROOT", str(BASE_DIR / "staticfiles")))
 
 # WhiteNoise compressed + forever-cacheable static files
 STORAGES = {
@@ -215,7 +220,14 @@ STORAGES = {
 
 # Media files (user uploads)
 MEDIA_URL = "media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = Path(os.environ.get("DJANGO_MEDIA_ROOT", str(BASE_DIR / "media")))
+
+# Optional private report_v2 storage roots. When unset, report_v2 keeps its
+# documented BASE_DIR/private_data fallback.
+if os.environ.get("REPORT_V2_ROOT"):
+    REPORT_V2_ROOT = Path(os.environ["REPORT_V2_ROOT"])
+if os.environ.get("REPORT_V2_SNAPSHOT_ROOT"):
+    REPORT_V2_SNAPSHOT_ROOT = Path(os.environ["REPORT_V2_SNAPSHOT_ROOT"])
 
 # Audit logging storage
 AUDIT_ARTIFACT_ROOT = Path(os.environ.get("AUDIT_ARTIFACT_ROOT", str(BASE_DIR / "audit_artifacts")))
@@ -248,12 +260,18 @@ LLM_ALLOW_INSECURE_TRANSPORT = os.environ.get(
 # HTTPS / Security settings (applied when DEBUG=False)
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "True").lower() in (
+    # The local development profile serves plain HTTP on loopback only, so its
+    # defaults avoid HTTPS redirects, HSTS and Secure-only cookies.
+    SECURE_SSL_REDIRECT = os.environ.get(
+        "DJANGO_SECURE_SSL_REDIRECT", "False" if PRIMER_LOCAL_DEV else "True"
+    ).lower() in (
         "true",
         "1",
         "yes",
     )
-    SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "31536000"))
+    SECURE_HSTS_SECONDS = int(
+        os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "0" if PRIMER_LOCAL_DEV else "31536000")
+    )
     SECURE_HSTS_INCLUDE_SUBDOMAINS = os.environ.get(
         "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", "True"
     ).lower() in ("true", "1", "yes")
@@ -262,8 +280,8 @@ if not DEBUG:
         "1",
         "yes",
     )
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_SECURE = not PRIMER_LOCAL_DEV
+    CSRF_COOKIE_SECURE = not PRIMER_LOCAL_DEV
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_REFERRER_POLICY = os.environ.get(
@@ -289,6 +307,9 @@ EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() in ("true", "1",
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "PRIMER-LLM <noreply@primer-llm.local>")
+if os.environ.get("EMAIL_FILE_PATH"):
+    # Used with django.core.mail.backends.filebased.EmailBackend (local profile).
+    EMAIL_FILE_PATH = os.environ["EMAIL_FILE_PATH"]
 
 # Logging — ensure errors appear in Gunicorn / Docker logs
 LOGGING = {

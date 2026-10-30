@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-06-14)
 Phase: 6 of 6 (remaining hipaa controls plan)
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-10-12 - Completed quick task 261012-u5i: Koios retro upload research and implementation plan
+Last activity: 2026-10-30 - Completed quick task 261030-w1n: Windows native local development mode (local verification pending)
 
 Progress: [----------] 0%
 
@@ -254,3 +254,7 @@ Quick task 261011-1cj implemented the 261009-vmg handoff: supporting field/forma
 ### API canonical image packaging (2026-10-19)
 
 | 261019-147 | Include canonical_processing.py and build-time import check; 6 tests passed; Docker deployment pending | 2026-10-19 | See summary | [261019-147](./quick/261019-147-fix-canonical-processing-module-missing-/) |
+
+### Windows native local development mode (2026-10-30)
+
+| 261030-w1n | Opt-in PRIMER_LOCAL_DEV profile, Windows launcher/diagnostics, qwen3 structured-output fixes; cloud mock E2E passed; Windows/Ollama verification pending on user machine | 2026-10-30 | See summary | [261030-w1n](./quick/261030-w1n-windows-native-local-dev-mode/) |

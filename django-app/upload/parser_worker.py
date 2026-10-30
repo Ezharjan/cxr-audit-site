@@ -49,7 +49,10 @@ def windows_limits():
     global _job_handle
     _job_handle = kernel.CreateJobObjectW(None, None)
     info = Extended()
-    info.basic.flags = 0x100 | 0x2  # Per-process memory and CPU time.
+    # Per-process memory (0x100), CPU time (0x2), one active process so the parser
+    # cannot spawn children (0x8), and no crash dialog that would stall until timeout (0x400).
+    info.basic.flags = 0x100 | 0x2 | 0x8 | 0x400
+    info.basic.active = 1
     info.basic.process_time = 20 * 10_000_000
     info.process_memory = 768 * 1024**2
     if not _job_handle or not kernel.SetInformationJobObject(_job_handle,9,c.byref(info),c.sizeof(info)) or not kernel.AssignProcessToJobObject(_job_handle,kernel.GetCurrentProcess()):

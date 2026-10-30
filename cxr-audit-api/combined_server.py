@@ -78,6 +78,47 @@ def configured_cors_origins() -> List[str]:
     return ["*"]
 
 
+def local_dev_mode() -> bool:
+    """Explicit single-workstation profile (PRIMER_LOCAL_DEV); never implicit."""
+    return _env_flag("PRIMER_LOCAL_DEV")
+
+
+_PLACEHOLDER_SECRETS = {"", "change-me", "change-me-to-a-random-secret", "changeme", "dummy"}
+
+
+def _is_loopback(host: str) -> bool:
+    import ipaddress
+    host = (host or "").strip().strip("[]").lower()
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def local_dev_startup_errors(bind_host: str) -> List[str]:
+    """Reasons the local development profile must refuse to start (no secret values)."""
+    if not local_dev_mode():
+        return []
+    errors = []
+    if not _is_loopback(bind_host):
+        errors.append("PRIMER_LOCAL_DEV requires a loopback bind host (127.0.0.1)")
+    if not _env_flag("API_REQUIRE_AUTH"):
+        errors.append("PRIMER_LOCAL_DEV requires API_REQUIRE_AUTH=True")
+    secret = configured_api_secret()
+    if secret.lower() in _PLACEHOLDER_SECRETS or len(secret) < 32:
+        errors.append("PRIMER_LOCAL_DEV requires a generated API_SECRET_KEY (32+ characters)")
+    from urllib.parse import urlparse
+    try:
+        llm_host = urlparse(os.environ.get("OLLAMA_BASE_URL", "")).hostname
+    except ValueError:
+        llm_host = None
+    if not _is_loopback(llm_host):
+        errors.append("PRIMER_LOCAL_DEV requires a loopback OLLAMA_BASE_URL")
+    return errors
+
+
 async def verify_api_key(request: Request, api_key: str = Security(_api_key_header)):
     """Validate the X-API-Key header against the configured secret."""
     if request.url.path == "/health":
@@ -87,7 +128,8 @@ async def verify_api_key(request: Request, api_key: str = Security(_api_key_head
         return  # Local development mode without a configured key.
     if not secret:
         raise HTTPException(status_code=503, detail="API authentication is required but API_SECRET_KEY is not configured")
-    if api_key != secret:
+    import hmac
+    if not api_key or not hmac.compare_digest(api_key.encode(), secret.encode()):
         raise HTTPException(status_code=403, detail="Invalid or missing API key")
 
 # ================================
@@ -831,10 +873,10 @@ async def health_check():
 # SERVER STARTUP FUNCTIONS
 # ================================
 
-def run_api_server():
-    """Run the API server on port 1221"""
-    print("Starting API Server on port 1221...")
-    uvicorn.run(api_app, host="0.0.0.0", port=1221, log_level="info")
+def run_api_server(host: str = "0.0.0.0", port: int = 1221):
+    """Run the API server (default 0.0.0.0:1221, as in the Docker deployment)."""
+    print(f"Starting API Server on {host}:{port}...")
+    uvicorn.run(api_app, host=host, port=port, log_level="info")
 
 def run_static_server():
     """Run the static server on port 1220"""
@@ -845,7 +887,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="CXR Analysis Server")
     parser.add_argument("--api-only", action="store_true",
                         help="Start only the API server on port 1221 (skip static server on 1220)")
+    parser.add_argument("--host", default=os.environ.get("API_BIND_HOST", "0.0.0.0"),
+                        help="API bind address (default 0.0.0.0; local profile requires 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("API_BIND_PORT", "1221")),
+                        help="API port (default 1221)")
     args = parser.parse_args()
+
+    startup_errors = local_dev_startup_errors(args.host)
+    if startup_errors:
+        for message in startup_errors:
+            print(f"ERROR: {message}")
+        raise SystemExit(2)
+    if local_dev_mode() and not args.api_only:
+        print("ERROR: PRIMER_LOCAL_DEV runs the API only (use --api-only)")
+        raise SystemExit(2)
 
     print("=" * 60)
     print("🚀 Starting CXR Analysis Combined Server")
@@ -859,7 +914,7 @@ if __name__ == "__main__":
         # Run API server directly on the main thread
         print("📋 API documentation: http://localhost:1221/docs")
         print("\n💡 Press Ctrl+C to stop the server")
-        run_api_server()
+        run_api_server(args.host, args.port)
     else:
         # Create threads for both servers
         api_thread = threading.Thread(target=run_api_server, daemon=True)
