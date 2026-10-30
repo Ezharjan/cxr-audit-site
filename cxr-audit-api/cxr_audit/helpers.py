@@ -3,13 +3,84 @@
 # Licensed under AGPL-3.0-or-later. See LICENSE at the repository root.
 import ast
 import json
+import os
+import re
 import pandas as pd
 import numpy as np
 import json_repair
 
+_THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+_CODE_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
+
+
+def _env_flag(name):
+    return os.environ.get(name, "").lower() in ("true", "1", "yes")
+
+
+def _structured_parse_method(client):
+    """Return the SDK's structured-output parse method.
+
+    openai>=1.40 exposes ``client.chat.completions.parse``; older 1.x releases only
+    had ``client.beta.chat.completions.parse`` (removed in openai 2.x).
+    """
+    completions = client.chat.completions
+    if hasattr(completions, "parse"):
+        return completions.parse
+    return client.beta.chat.completions.parse
+
+
+def apply_thinking_preference(message_lst):
+    """Optionally append Qwen3's ``/no_think`` soft switch to the last user message.
+
+    Opt-in via LLM_DISABLE_THINKING=True (useful for small local Qwen3 models);
+    the original message list is never mutated.
+    """
+    if not _env_flag("LLM_DISABLE_THINKING"):
+        return message_lst
+    messages = [dict(m) for m in message_lst]
+    for message in reversed(messages):
+        if message.get("role") == "user" and isinstance(message.get("content"), str):
+            if not message["content"].rstrip().endswith("/no_think"):
+                message["content"] = message["content"].rstrip() + "\n/no_think"
+            break
+    return messages
+
+
+def extract_json_object(text):
+    """Extract one JSON object from a model reply.
+
+    Handles reasoning-model output (``<think>...</think>`` blocks, including an
+    unterminated block), Markdown code fences and surrounding prose. Raises
+    ValueError when no JSON object is present.
+    """
+    if not isinstance(text, str):
+        raise ValueError("empty_llm_response")
+    cleaned = _THINK_BLOCK.sub("", text)
+    if "<think>" in cleaned.lower():
+        # Unterminated reasoning: keep only text after the last closing tag, if any.
+        cleaned = cleaned[cleaned.lower().rfind("</think>") + 8:] if "</think>" in cleaned.lower() else ""
+    cleaned = _CODE_FENCE.sub("", cleaned.strip())
+    start, end = cleaned.find("{"), cleaned.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("no_json_object")
+    value = json_repair.loads(cleaned[start:end + 1])
+    if not isinstance(value, dict):
+        raise ValueError("no_json_object")
+    return value
+
+
+def _validated(value, response_format):
+    """Validate against the Pydantic schema (strict fields stay strict) and return a dict."""
+    if hasattr(value, "model_dump"):
+        value = value.model_dump()
+    if hasattr(response_format, "model_validate"):
+        return response_format.model_validate(value).model_dump()
+    return value
+
+
 def getLLMJSON(message_lst, client, model_name, response_format, **kwargs):
     """
-    Sends a list of messages to a language model (LLM) and attempts to parse the response as JSON.
+    Sends a list of messages to a language model (LLM) and returns schema-valid JSON.
     Args:
         message_lst (list): A list of messages to send to the LLM.
         client (OpenAI): An instance of the OpenAI client.
@@ -17,97 +88,57 @@ def getLLMJSON(message_lst, client, model_name, response_format, **kwargs):
         response_format (BaseModel): Pydantic model for structured output.
 
     Returns:
-        dict: The parsed JSON object from the LLM response.
+        dict: The parsed JSON object, validated against ``response_format``.
 
     Raises:
-        ValueError: If no valid JSON object is found in the response after multiple attempts.
+        ValueError: If no schema-valid JSON object is returned after the fallback
+        and one repair request.
 
     Notes:
-        - If the initial response cannot be parsed as JSON, the function will attempt to extract a valid JSON object using regex.
-        - If regex extraction fails, the function will ask the LLM for help in debugging the JSON.
-        - If all attempts to parse the response as JSON fail, a ValueError is raised.
-        - With the new JSON schema format, json_repair shouldn't be necessary anymore.
+        - Structured outputs (JSON schema) are tried first; this works with vLLM and
+          Ollama's OpenAI-compatible endpoint.
+        - The fallback strips reasoning blocks (e.g. Qwen3 ``<think>``), extracts the
+          JSON object and validates it against the same schema, so a malformed small
+          model reply is rejected instead of silently accepted.
+        - Model output is never printed because reports may contain ePHI.
     """
-
+    messages = apply_thinking_preference(message_lst)
     try:
-        # Use structured outputs with OpenAI API
-        completion = client.beta.chat.completions.parse(
+        completion = _structured_parse_method(client)(
             model=model_name,
-            messages=message_lst,
+            messages=messages,
             response_format=response_format,
             **kwargs
         )
-
-        # Previous params:
-        # NO LONGER NEEDED because everything is defined in the model
-        #    temperature=0.7,
-        #    top_p=0.8,
-        #    presence_penalty=1.5,
-        #    extra_body={
-        #        "top_k": 20,
-        #        "thinking_token_budget": 500,
-        #    },
-
-        # Extract the parsed content
-        resp_json = completion.choices[0].message.parsed
-
-        # Convert Pydantic model to dict if needed
-        if hasattr(resp_json, 'model_dump'):
-            return resp_json.model_dump()
-        elif hasattr(resp_json, 'dict'):
-            return resp_json.dict()
-        else:
-            return resp_json
-
-    except Exception as e:
+        parsed = completion.choices[0].message.parsed
+        if parsed is None:
+            raise ValueError("structured_output_missing")
+        return _validated(parsed, response_format)
+    except Exception:
         print("Structured output unavailable; using JSON fallback")
-        # Fallback to regular completion
-        completion = client.chat.completions.create(
-            model=model_name,
-            messages=message_lst,
-            temperature=0.2
-        )
 
-        resp_content = completion.choices[0].message.content
+    completion = client.chat.completions.create(
+        model=model_name,
+        messages=messages,
+        temperature=0.2
+    )
+    resp_content = completion.choices[0].message.content or ""
+    try:
+        return _validated(extract_json_object(resp_content), response_format)
+    except Exception:
+        print("Fallback JSON invalid; requesting one repair")
 
-        try:
-            # Try to parse the response content as JSON
-            resp_json = json_repair.loads(resp_content)
-            # Return the parsed JSON object
-            return resp_json
-        except json.JSONDecodeError:
-            # If JSON decoding fails, print an error message and the response content
-            print(f'JSONDecodeError!')
-
-
-        # Attempt to find a valid JSON object within the response content using regex
-        match = re.search(r'\{.*\}', resp_content, re.DOTALL)
-        if match:
-            # If a valid JSON object is found, parse it
-            intermediate = match.group()
-        else:
-            # If no valid JSON object is found, print an error message
-            print('No valid JSON object found in the response. Retrying...')
-
-        # Ask the LLM for help
-        debug_messages = [{"role": "user", "content": f"Please fix this JSON: {resp_content}"}]
-        debug_completion = client.chat.completions.create(
-            model=model_name,
-            messages=debug_messages,
-            temperature=0.2
-        )
-        intermediate = debug_completion.choices[0].message.content
-
-        try:
-            # Try to parse the corrected response content as JSON
-            resp_json = json_repair.loads(intermediate)
-            # Return the parsed JSON object
-            return resp_json
-        except json.JSONDecodeError:
-            # If JSON decoding fails again, we give up
-            print(f'JSONDecodeError Again!')
-
-            raise ValueError("No valid JSON object found in the response")
+    # Ask the LLM once to repair its own output (no report text is added here).
+    debug_messages = apply_thinking_preference([{"role": "user", "content": f"Please fix this JSON and return only the JSON object: {resp_content}"}])
+    debug_completion = client.chat.completions.create(
+        model=model_name,
+        messages=debug_messages,
+        temperature=0.2
+    )
+    try:
+        return _validated(extract_json_object(debug_completion.choices[0].message.content or ""), response_format)
+    except Exception:
+        raise ValueError("No valid JSON object found in the response") from None
 
 def levenshtein_distance(s1, s2):
     """Calculate the Levenshtein distance between two strings."""

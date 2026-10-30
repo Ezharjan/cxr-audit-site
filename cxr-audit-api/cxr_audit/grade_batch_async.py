@@ -441,7 +441,7 @@ class BatchCXRProcessor:
     
     def process_full_pipeline(self, df: pd.DataFrame, report_column: str = 'REPORT',
                             steps: List[str] = ['semialgo', 'hybrid', 'llm', 'judge','lunit'],
-                            save_intermediate: bool = True, gt_present: bool = False, output_dir: str = '/tmp', strict=False) -> pd.DataFrame:
+                            save_intermediate: bool = True, gt_present: bool = False, output_dir: Optional[str] = None, strict=False) -> pd.DataFrame:
         """
         Process the full pipeline: semialgo -> hybrid -> LLM -> judge -> lunit
         
@@ -457,6 +457,10 @@ class BatchCXRProcessor:
             DataFrame with all grading columns added
         """
         print("Starting full CXR processing pipeline...")
+        if output_dir is None:
+            # Platform temp dir: /tmp on Linux containers, %TEMP% on Windows.
+            import tempfile
+            output_dir = tempfile.gettempdir()
         # Validate steps parameter
         valid_steps = {'semialgo', 'hybrid', 'llm', 'judge', 'lunit'}
         invalid_steps = set(steps) - valid_steps
