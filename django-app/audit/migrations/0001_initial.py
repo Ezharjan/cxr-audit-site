@@ -54,6 +54,9 @@ class Migration(migrations.Migration):
                     "user",
                     models.ForeignKey(
                         blank=True,
+                        # Users live in default, not the routed audit database.
+                        # This must be disabled at creation, before 0003 runs.
+                        db_constraint=False,
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="audit_events",
