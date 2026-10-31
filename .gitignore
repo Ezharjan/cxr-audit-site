@@ -1,3 +1,4 @@
+misc
 __pycache__/
 documentation/
 /django-app/db/db.sqlite3
