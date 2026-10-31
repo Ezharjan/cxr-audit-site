@@ -175,7 +175,7 @@ services:
       - PYTHONUNBUFFERED=1
       - API_REQUIRE_AUTH=${API_REQUIRE_AUTH:-true}
       - FASTAPI_CORS_ORIGINS=${FASTAPI_CORS_ORIGINS:-}
-    # Access the Ollama server running on the host machine
+    # Optional host-based OpenAI-compatible endpoint (Ollama or vLLM).
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:

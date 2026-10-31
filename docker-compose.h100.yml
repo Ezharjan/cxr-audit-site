@@ -1,0 +1,97 @@
+# Opt-in Linux/H100 deployment. See docs/H100_SERVER.md.
+services:
+  api:
+    environment:
+      OLLAMA_BASE_URL: http://llm:8000/v1
+      OLLAMA_MODEL: ${VLLM_MODEL:-Qwen/Qwen3-32B}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:?Generate .env with deploy/init_h100.py}
+      LLM_DISABLE_THINKING: "True"
+    depends_on:
+      llm:
+        condition: service_healthy
+  django:
+    environment:
+      OLLAMA_BASE_URL: http://llm:8000/v1
+      LLM_ALLOW_INSECURE_TRANSPORT: "True"
+  llm:
+    image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.11.0}
+    init: true
+    restart: unless-stopped
+    shm_size: 8gb
+    environment:
+      VLLM_API_KEY: ${OLLAMA_API_KEY:?Generate .env with deploy/init_h100.py}
+      HF_HUB_OFFLINE: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      VLLM_NO_USAGE_STATS: "1"
+      DO_NOT_TRACK: "1"
+    command:
+      - --model
+      - ${VLLM_MODEL:-Qwen/Qwen3-32B}
+      - --revision
+      - ${VLLM_MODEL_REVISION:?Set an immutable Hugging Face commit SHA}
+      - --tokenizer-revision
+      - ${VLLM_MODEL_REVISION:?Set an immutable Hugging Face commit SHA}
+      - --served-model-name
+      - ${VLLM_MODEL:-Qwen/Qwen3-32B}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --dtype
+      - bfloat16
+      - --tensor-parallel-size
+      - "1"
+      - --max-model-len
+      - ${VLLM_MAX_MODEL_LEN:-8192}
+      - --max-num-seqs
+      - ${VLLM_MAX_NUM_SEQS:-8}
+      - --gpu-memory-utilization
+      - ${VLLM_GPU_MEMORY_UTILIZATION:-0.90}
+      - --no-enable-log-requests
+      - --disable-uvicorn-access-log
+    volumes:
+      - llm-cache:/root/.cache/huggingface:ro
+    networks:
+      - primer-inference
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 15m
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Explicit one-shot download; never started by ordinary `compose up`.
+  model-download:
+    profiles: [download]
+    image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.11.0}
+    entrypoint: [python3, -c]
+    command:
+      - "import os; from huggingface_hub import snapshot_download; snapshot_download(repo_id=os.environ['VLLM_MODEL'], revision=os.environ['VLLM_MODEL_REVISION'])"
+    environment:
+      VLLM_MODEL: ${VLLM_MODEL:-Qwen/Qwen3-32B}
+      VLLM_MODEL_REVISION: ${VLLM_MODEL_REVISION:?Set an immutable Hugging Face commit SHA}
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    volumes:
+      - llm-cache:/root/.cache/huggingface
+    networks:
+      - primer-egress
+
+networks:
+  # Plain HTTP is confined to this same-host bridge; no external inference egress.
+  primer-inference:
+    internal: true
+
+volumes:
+  llm-cache:

@@ -2,6 +2,10 @@
 
 **Automated chest X-ray report analysis powered by Large Language Models.**
 
+**Deploying on an NVIDIA H100 server?** Follow the [H100 server guide](docs/H100_SERVER.md)
+for the vLLM Compose profile, GPU setup, generated secrets, PostgreSQL, TLS and
+verification steps. Ollama is not required for that deployment.
+
 PRIMER-LLM is a medical imaging AI audit system that compares AI-generated predictions (from [Lunit INSIGHT CXR](https://www.lunit.io/en/products/insight-cxr)) against radiologist ground truth reports. It uses LLMs to grade radiology reports on a standardised R1–R5 scale, then generates accuracy metrics, false negative/positive identification, and statistical reports — enabling continuous quality assurance of AI-assisted chest X-ray workflows.
 
 ---
@@ -96,7 +100,8 @@ PRIMER-LLM is a three-tier application:
 ## 📦 Prerequisites
 
 - **Docker** and **Docker Compose** (recommended for deployment)
-- **Ollama** running on a host machine with a supported model pulled (e.g. `qwen3:32b-q4_K_M`)
+- An **OpenAI-compatible inference endpoint**: use the [vLLM H100 profile](docs/H100_SERVER.md)
+  on an H100 server, or an existing endpoint such as Ollama for local development.
 
 For local development without Docker:
 - Python 3.11+
@@ -109,7 +114,8 @@ For local development without Docker:
 ### 1. Clone and configure
 
 ```bash
-git clone <repo-url> && cd django
+git clone <repo-url> cxr-audit-site
+cd cxr-audit-site
 cp .env.example .env
 ```
 
@@ -137,13 +143,15 @@ cd nginx && bash generate-certs.sh && cd ..
 docker compose up --build -d
 ```
 
-This starts three containers:
+The base stack starts these five containers (the H100 profile also adds vLLM):
 
 | Container | Port | Description |
 |-----------|------|-------------|
 | `primer-nginx` | 80, 443 | Reverse proxy (HTTPS) |
 | `primer-django` | 8000 (internal) | Web application |
 | `primer-api` | 1221 (internal) | Analysis API |
+| `primer-parser` | Unix socket only | Isolated spreadsheet parser |
+| `primer-postgres` | 5432 (internal) | Application and audit databases when selected |
 
 ### 4. Access the application
 
